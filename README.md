@@ -20,15 +20,39 @@ npm install path-geometry
 
 This README is the human overview and quick-start guide. Detailed API reference docs can be generated from JSDoc/TSDoc comments with TypeDoc:
 
-Online API documentation: https://shawn0326.github.io/path-geometry/
+Interactive Three.js examples: https://shawn0326.github.io/path-geometry/
+
+Online API documentation: https://shawn0326.github.io/path-geometry/api/
 
 ```sh
 npm run docs
 ```
 
-Generated HTML is written to `docs/api/` and is ignored by git by default, so CI can publish it later without committing generated files.
+Generated HTML is written to `docs/site/api/` and is ignored by git by default, so CI can publish it later without committing generated files.
 
-The GitHub Actions workflow deploys `docs/api/` to GitHub Pages automatically after every successful push to `master`.
+The GitHub Actions workflow deploys the visual examples and API documentation to GitHub Pages automatically after every successful push to `master`.
+
+Run the visual lab locally with:
+
+```sh
+npm run site:dev
+```
+
+The library stays renderer-neutral. A Three.js application only needs a small adapter for the returned buffers:
+
+```ts
+import * as THREE from 'three';
+import { geometry, path } from 'path-geometry';
+
+const route = path.create().setSmoothCurve(points);
+const data = geometry.createTube(route.buildFrames(), { radius: 0.2 });
+const threeGeometry = new THREE.BufferGeometry();
+
+threeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(data.positions, 3));
+threeGeometry.setAttribute('normal', new THREE.Float32BufferAttribute(data.normals, 3));
+threeGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(data.uvs, 2));
+threeGeometry.setIndex(data.indices);
+```
 
 ## Basic Usage: From Points
 

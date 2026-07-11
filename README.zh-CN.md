@@ -20,15 +20,39 @@ npm install path-geometry
 
 这个 README 作为人工维护的概览和快速上手文档。详细 API reference 可以通过 JSDoc/TSDoc 注释和 TypeDoc 生成：
 
-在线 API 文档：https://shawn0326.github.io/path-geometry/
+Three.js 交互示例：https://shawn0326.github.io/path-geometry/
+
+在线 API 文档：https://shawn0326.github.io/path-geometry/api/
 
 ```sh
 npm run docs
 ```
 
-生成的 HTML 会输出到 `docs/api/`，并默认被 git 忽略。后续可以通过 CI 发布在线文档，而不需要提交生成产物。
+生成的 HTML 会输出到 `docs/site/api/`，并默认被 git 忽略。后续可以通过 CI 发布在线文档，而不需要提交生成产物。
 
-GitHub Actions workflow 会在每次成功推送到 `master` 后，自动把 `docs/api/` 部署到 GitHub Pages。
+GitHub Actions workflow 会在每次成功推送到 `master` 后，自动把视觉示例和 API 文档部署到 GitHub Pages。
+
+可以在本地启动视觉实验室：
+
+```sh
+npm run site:dev
+```
+
+核心库仍然与渲染器无关。Three.js 应用只需要用一小段适配代码转换返回的 buffer：
+
+```ts
+import * as THREE from 'three';
+import { geometry, path } from 'path-geometry';
+
+const route = path.create().setSmoothCurve(points);
+const data = geometry.createTube(route.buildFrames(), { radius: 0.2 });
+const threeGeometry = new THREE.BufferGeometry();
+
+threeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(data.positions, 3));
+threeGeometry.setAttribute('normal', new THREE.Float32BufferAttribute(data.normals, 3));
+threeGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(data.uvs, 2));
+threeGeometry.setIndex(data.indices);
+```
 
 ## 基础用法：从点生成
 

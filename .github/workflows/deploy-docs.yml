@@ -39,14 +39,11 @@ jobs:
       - name: Test
         run: npm run test
 
-      - name: Build package
-        run: npm run build
-
       - name: Verify package contents
-        run: npm pack --dry-run
+        run: npm run build && npm pack --dry-run
 
-      - name: Build API docs
-        run: npm run docs
+      - name: Build Pages site
+        run: npm run pages:build
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -54,7 +51,7 @@ jobs:
       - name: Upload docs artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: docs/api
+          path: docs/site
 
   deploy:
     name: Deploy docs

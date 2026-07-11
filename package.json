@@ -34,12 +34,18 @@
     "typescript"
   ],
   "sideEffects": false,
+  "workspaces": [
+    "site"
+  ],
   "engines": {
     "node": ">=18"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts",
     "docs": "typedoc",
+    "site:dev": "npm run docs && npm run dev --workspace=@path-geometry/site",
+    "site:build": "npm run build && npm run build --workspace=@path-geometry/site",
+    "pages:build": "npm run site:build && npm run docs",
     "prepack": "npm run build",
     "prepublishOnly": "npm run typecheck && npm run test",
     "typecheck": "tsc --noEmit",
