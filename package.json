@@ -42,7 +42,7 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts",
+    "build": "tsdown",
     "docs": "typedoc",
     "site:dev": "npm run docs && npm run dev --workspace=@path-geometry/site",
     "site:build": "npm run build && npm run build --workspace=@path-geometry/site",
@@ -55,7 +55,7 @@
   },
   "devDependencies": {
     "t3d": "^0.5.3",
-    "tsup": "^8.5.0",
+    "tsdown": "^0.22.4",
     "typedoc": "^0.28.19",
     "typescript": "^5.9.3",
     "vitest": "^4.1.8"
