@@ -2,6 +2,12 @@ import { vec3 } from '../vector';
 import type { ReadonlyVector, Vector3 } from '../vector';
 import type { GeometryData, PathFrames } from '../types';
 import { triangulate } from './earcut';
+import {
+  createCornerSections,
+  transformCornerNormal,
+  transformCornerPoint
+} from './corner';
+import type { CornerSection } from './corner';
 
 export type SweepSideLayout = 'shared' | 'edge-isolated';
 export type SweepNormalMode = 'profile' | 'mesh';
@@ -17,17 +23,7 @@ export interface SweepProfile {
   capTriangles?: number[];
 }
 
-export interface SweepSection {
-  point: ReadonlyVector;
-  tangent: ReadonlyVector;
-  normal: ReadonlyVector;
-  binormal: ReadonlyVector;
-  bisector: ReadonlyVector;
-  length: number;
-  widthScale: number;
-  sharp: boolean;
-  uniformScale: number;
-}
+export type SweepSection = CornerSection;
 
 export interface SweepOptions {
   sideLayout: SweepSideLayout;
@@ -57,7 +53,7 @@ interface SweepLoopMetrics {
 }
 
 export interface CreateSweepSectionsOptions {
-  scaleNonSharp: boolean;
+  cornerTransition: boolean;
   sanitizeWidthScale: boolean;
 }
 
@@ -78,24 +74,6 @@ function finiteOrDefault(value: number | undefined, defaultValue: number): numbe
 function normalizeScale(value: number | undefined): number {
   const scale = finiteOrDefault(value, 1);
   return Math.abs(scale) < 1e-12 ? 1 : scale;
-}
-
-function scaleAlong(out: Vector3, value: ReadonlyVector, axis: ReadonlyVector, scale: number): Vector3 {
-  const axisLengthSq = vec3.squaredLength(axis);
-
-  if (axisLengthSq <= 0) {
-    vec3.copy(out, value);
-    return out;
-  }
-
-  const projection = vec3.dot(value, axis) / axisLengthSq;
-  const factor = projection * (scale - 1);
-
-  out[0] = value[0]! + axis[0]! * factor;
-  out[1] = value[1]! + axis[1]! * factor;
-  out[2] = value[2]! + axis[2]! * factor;
-
-  return out;
 }
 
 function pushVec3(target: number[], value: ReadonlyVector): void {
@@ -170,43 +148,60 @@ function getProfileNormal(
 
 function transformPoint(
   out: Vector3,
-  local: Vector3,
   section: SweepSection,
   point: ReadonlyArray<number>
 ): Vector3 {
-  vec3.scale(local, section.binormal, point[0]!);
-  vec3.scaleAndAdd(local, local, section.normal, point[1]!);
-
-  if (section.sharp) {
-    scaleAlong(local, local, section.bisector, section.widthScale);
-  } else if (section.uniformScale !== 1) {
-    vec3.scale(local, local, section.uniformScale);
-  }
-
-  return vec3.add(out, section.point, local);
+  return transformCornerPoint(out, section, point);
 }
 
 function transformNormal(
   out: Vector3,
-  local: Vector3,
   section: SweepSection,
   profileNormal: number[]
 ): Vector3 {
-  vec3.scale(local, section.binormal, profileNormal[0]!);
-  vec3.scaleAndAdd(local, local, section.normal, profileNormal[1]!);
-
-  if (section.sharp) {
-    scaleAlong(out, local, section.bisector, 1 / section.widthScale);
-  } else {
-    vec3.copy(out, local);
-  }
-
-  return vec3.normalize(out, out);
+  return transformCornerNormal(out, section, profileNormal);
 }
 
 function pushTriangle(indices: number[], a: number, b: number, c: number, flip: boolean): void {
   if (flip) indices.push(a, c, b);
   else indices.push(a, b, c);
+}
+
+function verticesCoincide(positions: number[], first: number, second: number): boolean {
+  const firstOffset = first * 3;
+  const secondOffset = second * 3;
+  const dx = positions[firstOffset]! - positions[secondOffset]!;
+  const dy = positions[firstOffset + 1]! - positions[secondOffset + 1]!;
+  const dz = positions[firstOffset + 2]! - positions[secondOffset + 2]!;
+  return dx * dx + dy * dy + dz * dz <= 1e-20;
+}
+
+function connectQuad(
+  geometry: GeometryData,
+  previousFirst: number,
+  previousSecond: number,
+  currentFirst: number,
+  currentSecond: number,
+  flipWinding: boolean,
+  collapseAware: boolean
+): void {
+  const firstCollapsed = collapseAware && verticesCoincide(
+    geometry.positions,
+    previousFirst,
+    currentFirst
+  );
+  const secondCollapsed = collapseAware && verticesCoincide(
+    geometry.positions,
+    previousSecond,
+    currentSecond
+  );
+
+  if (!firstCollapsed) {
+    pushTriangle(geometry.indices, currentFirst, previousFirst, previousSecond, flipWinding);
+  }
+  if (!secondCollapsed) {
+    pushTriangle(geometry.indices, currentFirst, previousSecond, currentSecond, flipWinding);
+  }
 }
 
 function addVertex(
@@ -222,21 +217,19 @@ function addVertex(
   analyticNormal: boolean,
   attributeSink: SweepAttributeSink,
   position: Vector3,
-  local: Vector3,
   normal: Vector3,
-  localNormal: Vector3,
   profileNormal: number[]
 ): number {
   const loop = profile.loops[loopIndex]!;
   const point = loop.points[pointIndex]!;
   const section = sections[sectionIndex]!;
 
-  transformPoint(position, local, section, point);
+  transformPoint(position, section, point);
   pushVec3(geometry.positions, position);
 
   if (analyticNormal) {
     getProfileNormal(profileNormal, loop, pointIndex);
-    transformNormal(normal, localNormal, section, profileNormal);
+    transformNormal(normal, section, profileNormal);
     pushVec3(geometry.normals, normal);
   }
 
@@ -254,9 +247,7 @@ function addSharedSides(
   attributeSink: SweepAttributeSink
 ): void {
   const position = vec3.create();
-  const local = vec3.create();
   const normal = vec3.create();
-  const localNormal = vec3.create();
   const profileNormal = [0, 0];
   let previousSectionRings: number[][] | null = null;
 
@@ -287,9 +278,7 @@ function addSharedSides(
           analyticNormals,
           attributeSink,
           position,
-          local,
           normal,
-          localNormal,
           profileNormal
         ));
       }
@@ -302,10 +291,18 @@ function addSharedSides(
         const previous = previousSectionRings[loopIndex]!;
         const current = sectionRings[loopIndex]!;
         const edgeCount = loopMetrics[loopIndex]!.edgeCount;
+        const collapseAware = sections[sectionIndex]!.collapsePrevious;
 
         for (let edgeIndex = 0; edgeIndex < edgeCount; edgeIndex++) {
-          pushTriangle(geometry.indices, current[edgeIndex]!, previous[edgeIndex]!, previous[edgeIndex + 1]!, flipWinding);
-          pushTriangle(geometry.indices, current[edgeIndex]!, previous[edgeIndex + 1]!, current[edgeIndex + 1]!, flipWinding);
+          connectQuad(
+            geometry,
+            previous[edgeIndex]!,
+            previous[edgeIndex + 1]!,
+            current[edgeIndex]!,
+            current[edgeIndex + 1]!,
+            flipWinding,
+            collapseAware
+          );
         }
       }
     }
@@ -324,9 +321,7 @@ function addEdgeIsolatedSides(
   attributeSink: SweepAttributeSink
 ): void {
   const position = vec3.create();
-  const local = vec3.create();
   const normal = vec3.create();
-  const localNormal = vec3.create();
   const profileNormal = [0, 0];
 
   for (let loopIndex = 0; loopIndex < profile.loops.length; loopIndex++) {
@@ -357,9 +352,7 @@ function addEdgeIsolatedSides(
           analyticNormals,
           attributeSink,
           position,
-          local,
           normal,
-          localNormal,
           profileNormal
         );
         const second = addVertex(
@@ -375,15 +368,20 @@ function addEdgeIsolatedSides(
           analyticNormals,
           attributeSink,
           position,
-          local,
           normal,
-          localNormal,
           profileNormal
         );
 
         if (sectionIndex > 0) {
-          pushTriangle(geometry.indices, previousFirst, previousSecond, first, flipWinding);
-          pushTriangle(geometry.indices, previousSecond, second, first, flipWinding);
+          connectQuad(
+            geometry,
+            previousFirst,
+            previousSecond,
+            first,
+            second,
+            flipWinding,
+            sections[sectionIndex]!.collapsePrevious
+          );
         }
 
         previousFirst = first;
@@ -439,7 +437,6 @@ function addCap(
   const isEnd = surface === 'end-cap';
   const sectionIndex = isEnd ? sections.length - 1 : 0;
   const position = vec3.create();
-  const local = vec3.create();
   const capNormal = vec3.create();
   const vertexIndices: number[] = [];
   const section = sections[sectionIndex]!;
@@ -451,7 +448,7 @@ function addCap(
     const source = capData.points[i]!;
     const loop = profile.loops[source.loopIndex]!;
     const point = loop.points[source.pointIndex]!;
-    transformPoint(position, local, section, point);
+    transformPoint(position, section, point);
     pushVec3(geometry.positions, position);
     if (analyticNormals) pushVec3(geometry.normals, capNormal);
 
@@ -522,59 +519,51 @@ function computeMeshNormals(positions: number[], indices: number[]): number[] {
 }
 
 export function createSweepSections(
+  profile: SweepProfile,
   frames: PathFrames,
   options: CreateSweepSectionsOptions
 ): SweepSection[] {
-  const sections: SweepSection[] = [];
-
-  for (let i = 0; i < frames.points.length; i++) {
-    const sourceWidthScale = frames.widthScales[i]!;
-    const widthScale = options.sanitizeWidthScale ? normalizeScale(sourceWidthScale) : sourceWidthScale;
-    const sharp = frames.sharps[i] ?? false;
-    sections.push({
-      point: frames.points[i]!,
-      tangent: frames.tangents[i]!,
-      normal: frames.normals[i]!,
-      binormal: frames.binormals[i]!,
-      bisector: frames.bisectors[i]!,
-      length: finiteOrDefault(frames.lengths[i], 0),
-      widthScale,
-      sharp,
-      uniformScale: options.scaleNonSharp && !sharp ? widthScale : 1
-    });
-  }
-
-  return sections;
+  return createCornerSections(
+    frames,
+    profile.loops.map(loop => loop.points),
+    {
+      cornerTransition: options.cornerTransition,
+      resolveWidthScale: options.sanitizeWidthScale
+        ? normalizeScale
+        : value => value as number
+    }
+  );
 }
 
 export function createLinearSweepSections(depth: number): SweepSection[] {
   const tangent = vec3.fromValues(0, 0, -1);
   const normal = vec3.fromValues(0, 1, 0);
   const binormal = vec3.fromValues(1, 0, 0);
-  const bisector = vec3.fromValues(1, 0, 0);
 
   return [
     {
-      point: vec3.fromValues(0, 0, 0),
+      origin: vec3.fromValues(0, 0, 0),
       tangent,
-      normal,
-      binormal,
-      bisector,
+      xAxis: binormal,
+      yAxis: normal,
+      normalX: binormal,
+      normalY: normal,
       length: 0,
-      widthScale: 1,
-      sharp: false,
-      uniformScale: 1
+      sourceFrameIndex: 0,
+      role: 'regular',
+      collapsePrevious: false
     },
     {
-      point: vec3.fromValues(0, 0, -depth),
+      origin: vec3.fromValues(0, 0, -depth),
       tangent,
-      normal,
-      binormal,
-      bisector,
+      xAxis: binormal,
+      yAxis: normal,
+      normalX: binormal,
+      normalY: normal,
       length: Math.abs(depth),
-      widthScale: 1,
-      sharp: false,
-      uniformScale: 1
+      sourceFrameIndex: 1,
+      role: 'regular',
+      collapsePrevious: false
     }
   ];
 }

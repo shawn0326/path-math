@@ -182,6 +182,8 @@ for (let i = 0; i < frames.points.length; i++) {
 
 所有 geometry builder 都返回普通数组：`positions`、`normals`、`uvs`、`uvs2` 和 `indices`。你可以按需要把它们转换成 WebGL、WebGPU 或自定义 renderer 所需的 buffer/attribute 格式。
 
+基于路径的 geometry builder 只沿 frame 的拐角二等分方向进行 miter 修正。设置 `cornerTransition: true` 可以为明显拐角展开 corner transition；默认情况下每个 frame 只生成一个截面。Ribbon 原有的 `sharp` 选项作为 `cornerTransition` 的废弃兼容别名继续保留。
+
 ```ts
 import { path, geometry } from 'path-geometry';
 
@@ -201,13 +203,15 @@ const tubeGeometry = geometry.createTube(frames, {
   radius: 0.2,
   radialSegments: 12,
   generateStartCap: true,
-  generateEndCap: true
+  generateEndCap: true,
+  cornerTransition: true
 });
 
 const ribbonGeometry = geometry.createRibbon(frames, {
   width: 1,
   side: 'both',
-  arrow: false
+  arrow: false,
+  cornerTransition: true
 });
 
 const extrudeGeometry = geometry.createExtrudeShape({
@@ -225,7 +229,8 @@ const extrudeGeometry = geometry.createExtrudeShape({
       [0.5, 0.75]
     ]
   ],
-  pathFrames: frames
+  pathFrames: frames,
+  cornerTransition: true
 });
 ```
 

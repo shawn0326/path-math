@@ -58,8 +58,9 @@ export function createTube(frames: PathFrames, options: BuildTubeOptions = {}): 
   const radialSegments = normalizeSegments(options.radialSegments);
   const startRad = finiteOrDefault(options.startRad, 0);
   const circumference = radius * TAU;
-  const sections = createSweepSections(frames, {
-    scaleNonSharp: true,
+  const profile = createCircleProfile(radius, radialSegments, startRad);
+  const sections = createSweepSections(profile, frames, {
+    cornerTransition: options.cornerTransition ?? false,
     sanitizeWidthScale: true
   });
   const totalLength = sections[sections.length - 1]?.length ?? 0;
@@ -85,7 +86,7 @@ export function createTube(frames: PathFrames, options: BuildTubeOptions = {}): 
   };
 
   return createSweep(
-    createCircleProfile(radius, radialSegments, startRad),
+    profile,
     sections,
     {
       sideLayout: 'shared',

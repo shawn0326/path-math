@@ -182,6 +182,8 @@ Use `geometry.createTube(frames, options?)`, `geometry.createRibbon(frames, opti
 
 All geometry builders return plain arrays: `positions`, `normals`, `uvs`, `uvs2`, and `indices`. You can convert them to the buffer/attribute format required by WebGL, WebGPU, or your renderer.
 
+Path-based builders apply miter correction only along each frame's corner bisector. Set `cornerTransition: true` to expand sharp frames into corner-transition sections; by default, each frame produces one section. Ribbon's previous `sharp` option remains as a deprecated compatibility alias for `cornerTransition`.
+
 ```ts
 import { path, geometry } from 'path-geometry';
 
@@ -201,13 +203,15 @@ const tubeGeometry = geometry.createTube(frames, {
   radius: 0.2,
   radialSegments: 12,
   generateStartCap: true,
-  generateEndCap: true
+  generateEndCap: true,
+  cornerTransition: true
 });
 
 const ribbonGeometry = geometry.createRibbon(frames, {
   width: 1,
   side: 'both',
-  arrow: false
+  arrow: false,
+  cornerTransition: true
 });
 
 const extrudeGeometry = geometry.createExtrudeShape({
@@ -225,7 +229,8 @@ const extrudeGeometry = geometry.createExtrudeShape({
       [0.5, 0.75]
     ]
   ],
-  pathFrames: frames
+  pathFrames: frames,
+  cornerTransition: true
 });
 ```
 

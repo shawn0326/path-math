@@ -297,6 +297,8 @@ export interface BuildExtrudeShapeOptions {
   generateBottom?: boolean;
   /** Extrude along path frames instead of the Z axis. 沿 path frame 挤出，而不是沿 Z 轴。*/
   pathFrames?: PathFrames;
+  /** Expand sharp path corners into transition sections. Defaults to false. */
+  cornerTransition?: boolean;
 }
 
 /**
@@ -314,6 +316,8 @@ export interface BuildTubeOptions {
   generateStartCap?: boolean;
   /** Add triangles that close the last tube ring. Defaults to false. 添加封闭最后一圈管环的三角面，默认 false。*/
   generateEndCap?: boolean;
+  /** Expand sharp path corners into transition rings. Defaults to false. */
+  cornerTransition?: boolean;
 }
 
 /**
@@ -333,7 +337,9 @@ export interface BuildRibbonOptions {
   arrow?: boolean;
   /** Build both sides or only one side relative to the path center line. Defaults to 'both'. 相对于路径中心线构建双侧或单侧，默认 'both'。*/
   side?: RibbonSide;
-  /** Add extra triangles around sharp corners. Defaults to false. 在尖锐转角处添加额外三角面，默认 false。*/
+  /** Expand sharp path corners into transition sections. Defaults to false. */
+  cornerTransition?: boolean;
+  /** @deprecated Use `cornerTransition` instead. */
   sharp?: boolean;
 }
 

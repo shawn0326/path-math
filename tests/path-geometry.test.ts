@@ -9,6 +9,7 @@ import { CurvePath3 as T3DCurvePath3 } from 't3d/examples/jsm/math/curves/CurveP
 import { segment, path, geometry } from '../src/index';
 import type { Path, PathFrames, PolylineOptions, ReadonlyVector } from '../src/index';
 import { createLinearSweepSections, createSweep } from '../src/geometry/sweep';
+import { createCornerSections, transformCornerPoint } from '../src/geometry/corner';
 
 const EPS = 1e-5;
 
@@ -1078,9 +1079,227 @@ describe('geometry builders', () => {
     expect(arrow.positions).toHaveLength((frames.points.length * 2 + 3) * 3);
     expect(arrow.indices.slice(-3)).toEqual([frames.points.length * 2 + 2, frames.points.length * 2, frames.points.length * 2 + 1]);
   });
+
+  it('applies non-sharp tube miter correction only along the bend direction', () => {
+    const frames = createPolyline([
+      vec3.fromValues(0, 0, 0),
+      vec3.fromValues(4, 0, 0),
+      vec3.fromValues(8, 0.8, 0)
+    ]).buildFrames({ initialNormal: vec3.fromValues(0, 0, 1) });
+    expect(frames.sharps[1]).toBe(false);
+    expect(frames.widthScales[1]).toBeGreaterThan(1);
+
+    const tube = geometry.createTube(frames, {
+      radius: 1,
+      radialSegments: 4,
+      cornerTransition: false
+    });
+    const middleNormalPoint = vec3.fromValues(
+      tube.positions[5 * 3]!,
+      tube.positions[5 * 3 + 1]!,
+      tube.positions[5 * 3 + 2]!
+    );
+    expect(vec3.distance(middleNormalPoint, frames.points[1]!)).toBeCloseTo(1);
+  });
+
+  it('uses directional miter correction for spatial ribbons', () => {
+    const diagonal = 1 / Math.sqrt(2);
+    const frames: PathFrames = {
+      points: [
+        vec3.fromValues(0, 0, 0),
+        vec3.fromValues(1, 0, 0),
+        vec3.fromValues(2, 0, 0)
+      ],
+      tangents: [
+        vec3.fromValues(1, 0, 0),
+        vec3.fromValues(1, 0, 0),
+        vec3.fromValues(1, 0, 0)
+      ],
+      normals: [
+        vec3.fromValues(0, 1, 0),
+        vec3.fromValues(0, 1, 0),
+        vec3.fromValues(0, 1, 0)
+      ],
+      binormals: [
+        vec3.fromValues(0, 0, 1),
+        vec3.fromValues(0, 0, 1),
+        vec3.fromValues(0, 0, 1)
+      ],
+      bisectors: [
+        vec3.fromValues(0, 0, 1),
+        vec3.fromValues(0, diagonal, diagonal),
+        vec3.fromValues(0, 0, 1)
+      ],
+      lengths: [0, 1, 2],
+      widthScales: [1, Math.sqrt(2), 1],
+      sharps: [false, false, false],
+      tangentTypes: [0, 0, 0]
+    };
+
+    const ribbon = geometry.createRibbon(frames, {
+      width: 2,
+      arrow: false,
+      cornerTransition: false
+    });
+    const expectedAddition = (Math.sqrt(2) - 1) / 2;
+    expectNumberArrayClose(
+      ribbon.positions.slice(3 * 3, 3 * 3 + 3),
+      [1, expectedAddition, 1 + expectedAddition]
+    );
+  });
+
+  it('keeps corner transitions opt-in and supports the legacy Ribbon sharp alias', () => {
+    const frames = createPolyline([
+      vec3.fromValues(0, 0, 0),
+      vec3.fromValues(4, 0, 0),
+      vec3.fromValues(4, 4, 0)
+    ]).buildFrames({ initialNormal: vec3.fromValues(0, 0, 1) });
+    expect(frames.sharps[1]).toBe(true);
+
+    const ribbon = geometry.createRibbon(frames, { width: 2, arrow: false });
+    const explicitSimpleRibbon = geometry.createRibbon(frames, {
+      width: 2,
+      arrow: false,
+      cornerTransition: false
+    });
+    const legacyTransition = geometry.createRibbon(frames, {
+      width: 2,
+      arrow: false,
+      sharp: true
+    });
+    const explicitTransition = geometry.createRibbon(frames, {
+      width: 2,
+      arrow: false,
+      cornerTransition: true,
+      sharp: false
+    });
+    const explicitDisableWins = geometry.createRibbon(frames, {
+      width: 2,
+      arrow: false,
+      cornerTransition: false,
+      sharp: true
+    });
+    expect(ribbon.positions).toHaveLength(6 * 3);
+    expect(ribbon.indices).toHaveLength(4 * 3);
+    expect(explicitSimpleRibbon).toEqual(ribbon);
+    expect(explicitDisableWins).toEqual(ribbon);
+    expect(explicitTransition.positions).toHaveLength(10 * 3);
+    expect(explicitTransition.indices).toHaveLength(6 * 3);
+    expect(legacyTransition).toEqual(explicitTransition);
+    const ribbonUs = [0, 1, 2, 3, 4].map(sectionIndex => explicitTransition.uvs[sectionIndex * 4]!);
+    const ribbonUs2 = [0, 1, 2, 3, 4].map(sectionIndex => explicitTransition.uvs2[sectionIndex * 4]!);
+    expect(ribbonUs).toEqual([...ribbonUs].sort((a, b) => a - b));
+    expect(ribbonUs2).toEqual([...ribbonUs2].sort((a, b) => a - b));
+
+    const tube = geometry.createTube(frames, { radius: 1, radialSegments: 4 });
+    const transitionedTube = geometry.createTube(frames, {
+      radius: 1,
+      radialSegments: 4,
+      cornerTransition: true
+    });
+    expect(tube.positions).toHaveLength(15 * 3);
+    expect(tube.indices).toHaveLength(16 * 3);
+    expect(transitionedTube.positions).toHaveLength(25 * 3);
+    expect(transitionedTube.indices).toHaveLength(28 * 3);
+    const zeroRadiusTube = geometry.createTube(frames, {
+      radius: 0,
+      radialSegments: 4,
+      cornerTransition: true
+    });
+    expect(zeroRadiusTube.positions).toHaveLength(15 * 3);
+    expect(zeroRadiusTube.indices).toHaveLength(16 * 3);
+
+    const contour = [[-1, -1], [-1, 1], [1, 1], [1, -1]];
+    const extrude = geometry.createExtrudeShape({
+      contour: contour.map(point => [...point]),
+      pathFrames: frames,
+      generateTop: false,
+      generateBottom: false
+    });
+    const transitionedExtrude = geometry.createExtrudeShape({
+      contour: contour.map(point => [...point]),
+      pathFrames: frames,
+      generateTop: false,
+      generateBottom: false,
+      cornerTransition: true
+    });
+    expect(extrude.positions).toHaveLength(24 * 3);
+    expect(extrude.indices).toHaveLength(16 * 3);
+    expect(transitionedExtrude.positions).toHaveLength(40 * 3);
+    expect(transitionedExtrude.indices).toHaveLength(24 * 3);
+
+    const withHole = geometry.createExtrudeShape({
+      contour: [[-2, -2], [-2, 2], [2, 2], [2, -2]],
+      holes: [[[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]]],
+      pathFrames: frames,
+      generateTop: false,
+      generateBottom: false
+    });
+    expect(withHole.positions.every(Number.isFinite)).toBe(true);
+    expect(withHole.normals.every(Number.isFinite)).toBe(true);
+    expect(Math.max(...withHole.indices)).toBeLessThan(withHole.positions.length / 3);
+  });
 });
 
 describe('internal sweep core', () => {
+  it('resolves a sharp corner into affine join sections with monotonic distances', () => {
+    const frames = createPolyline([
+      vec3.fromValues(0, 0, 0),
+      vec3.fromValues(4, 0, 0),
+      vec3.fromValues(4, 4, 0)
+    ]).buildFrames({ initialNormal: vec3.fromValues(0, 0, 1) });
+    const sections = createCornerSections(frames, [[[-1, 0], [1, 0]]], {
+      cornerTransition: true,
+      resolveWidthScale: value => value ?? 1
+    });
+    expect(sections.map(section => section.role)).toEqual([
+      'regular',
+      'join-in',
+      'join-center',
+      'join-out',
+      'regular'
+    ]);
+    expectNumberArrayClose(sections.map(section => section.length), [0, 3, 4, 5, 8]);
+
+    const inner = vec3.create();
+    const outer = vec3.create();
+    const centerInner = transformCornerPoint(inner, sections[2]!, [-1, 0]).slice();
+    const centerOuter = transformCornerPoint(outer, sections[2]!, [1, 0]).slice();
+    expectNumberArrayClose(transformCornerPoint(inner, sections[1]!, [-1, 0]), centerInner);
+    expectNumberArrayClose(transformCornerPoint(inner, sections[3]!, [-1, 0]), centerInner);
+    expectNumberArrayClose(centerInner, [3, 1, 0]);
+    expectNumberArrayClose(centerOuter, [5, -1, 0]);
+    expectNumberArrayClose(transformCornerPoint(outer, sections[1]!, [1, 0]), [3, -1, 0]);
+    expectNumberArrayClose(transformCornerPoint(outer, sections[3]!, [1, 0]), [5, 1, 0]);
+  });
+
+  it('clamps adjacent corner transitions to short path segments', () => {
+    const frames = createPolyline([
+      vec3.fromValues(0, 0, 0),
+      vec3.fromValues(1, 0, 0),
+      vec3.fromValues(1, 1, 0),
+      vec3.fromValues(2, 1, 0)
+    ]).buildFrames({ initialNormal: vec3.fromValues(0, 0, 1) });
+    const sections = createCornerSections(frames, [[[-1, 0], [1, 0]]], {
+      cornerTransition: true,
+      resolveWidthScale: value => value ?? 1
+    });
+    expect(sections.map(section => section.role)).toEqual([
+      'regular',
+      'join-in',
+      'join-center',
+      'join-out',
+      'join-in',
+      'join-center',
+      'join-out',
+      'regular'
+    ]);
+    for (let i = 1; i < sections.length; i++) {
+      expect(sections[i]!.length).toBeGreaterThanOrEqual(sections[i - 1]!.length);
+    }
+    expect(sections[3]!.length).toBeLessThanOrEqual(sections[4]!.length);
+  });
+
   it('supports an open two-point profile without closing or capping it', () => {
     const surfaces: string[] = [];
     const result = createSweep({

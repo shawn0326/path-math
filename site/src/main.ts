@@ -26,7 +26,7 @@ interface State {
   width: number;
   side: RibbonSide;
   arrow: boolean;
-  sharp: boolean;
+  cornerTransition: boolean;
   wireframe: boolean;
   normals: boolean;
   materialSide: MaterialSide;
@@ -53,7 +53,7 @@ const state: State = {
   width: 1.5,
   side: 'both',
   arrow: true,
-  sharp: true,
+  cornerTransition: false,
   wireframe: false,
   normals: false,
   materialSide: 'front',
@@ -82,7 +82,7 @@ const sceneInfo: Record<SceneId, { title: string; kicker: string; description: s
   ribbon: {
     title: 'Ribbon geometry',
     kicker: '04 / MESH',
-    description: 'Exercise side selection, sharp joins, width scaling and arrow heads.'
+    description: 'Exercise side selection, corner transitions, width scaling and arrow heads.'
   },
   extrude: {
     title: 'Shape extrusion',
@@ -150,7 +150,6 @@ app.innerHTML = `
         <label>Width <output id="width-value"></output><input id="width" type="range" min="0.2" max="3" step="0.1"></label>
         <label>Side<select id="side"><option value="both">Both</option><option value="left">Left</option><option value="right">Right</option></select></label>
         <label class="check"><input id="arrow" type="checkbox"> Arrow head</label>
-        <label class="check"><input id="sharp" type="checkbox"> Sharp joins</label>
       </section>
       <section data-scenes="extrude">
         <p class="section-label">Extrusion</p>
@@ -158,6 +157,10 @@ app.innerHTML = `
         <label class="check"><input id="along-path" type="checkbox"> Extrude along path</label>
         <label class="check"><input id="generate-top" type="checkbox"> Generate top</label>
         <label class="check"><input id="generate-bottom" type="checkbox"> Generate bottom</label>
+      </section>
+      <section data-scenes="tube ribbon extrude">
+        <p class="section-label">Corners</p>
+        <label class="check"><input id="corner-transition" type="checkbox"> Corner transition</label>
       </section>
       <section data-scenes="tube ribbon extrude">
         <p class="section-label">Inspection</p>
@@ -214,6 +217,13 @@ function updatePresetControls(): void {
   close.closest('label')?.classList.toggle('disabled', fixedMixedPath || fixedClosedPath);
 }
 
+function updateCornerTransitionControl(): void {
+  const cornerTransition = input<HTMLInputElement>('corner-transition');
+  const disabled = state.scene === 'extrude' && !state.alongPath;
+  cornerTransition.disabled = disabled;
+  cornerTransition.closest('label')?.classList.toggle('disabled', disabled);
+}
+
 function meshStats(data: GeometryData): string {
   return `<span><b>${data.positions.length / 3}</b> vertices</span><span><b>${data.indices.length / 3}</b> triangles</span>`;
 }
@@ -221,9 +231,9 @@ function meshStats(data: GeometryData): string {
 function codeForScene(scene: SceneId): string {
   if (scene === 'sampling') return `const route = path.create()\n  .setSmoothCurve(points, { smooth: 0.35 });\n\nconst raw = route.getPoints(18);\nconst spaced = route.getSpacedPoints(18);`;
   if (scene === 'frames') return `const frames = route.buildFrames({\n  divisions: 18,\n  transport: true,\n  initialNormal: [0, 1, 0]\n});`;
-  if (scene === 'tube') return `const frames = route.buildFrames({ divisions: 18 });\nconst mesh = geometry.createTube(frames, {\n  radius: 0.55,\n  radialSegments: 12,\n  generateStartCap: true,\n  generateEndCap: true\n});`;
-  if (scene === 'ribbon') return `const frames = route.buildFrames({ divisions: 18 });\nconst mesh = geometry.createRibbon(frames, {\n  width: 1.5,\n  side: 'both',\n  arrow: true,\n  sharp: true\n});`;
-  return `const frames = route.buildFrames({ divisions: 18 });\nconst mesh = geometry.createExtrudeShape({\n  contour,\n  holes: [hole],\n  pathFrames: frames\n});`;
+  if (scene === 'tube') return `const frames = route.buildFrames({ divisions: 18 });\nconst mesh = geometry.createTube(frames, {\n  radius: 0.55,\n  radialSegments: 12,\n  generateStartCap: true,\n  generateEndCap: true,\n  cornerTransition: ${state.cornerTransition}\n});`;
+  if (scene === 'ribbon') return `const frames = route.buildFrames({ divisions: 18 });\nconst mesh = geometry.createRibbon(frames, {\n  width: 1.5,\n  side: 'both',\n  arrow: true,\n  cornerTransition: ${state.cornerTransition}\n});`;
+  return `const frames = route.buildFrames({ divisions: 18 });\nconst mesh = geometry.createExtrudeShape({\n  contour,\n  holes: [hole],\n  pathFrames: frames,\n  cornerTransition: ${state.cornerTransition}\n});`;
 }
 
 function rebuild(): void {
@@ -238,6 +248,7 @@ function rebuild(): void {
       : '';
   input<HTMLElement>('preset-description').textContent = presets[state.preset].description + presetNote;
   updatePresetControls();
+  updateCornerTransitionControl();
   input<HTMLElement>('code').textContent = codeForScene(state.scene);
   document.querySelectorAll<HTMLElement>('[data-scenes]').forEach(element => {
     element.hidden = !element.dataset.scenes!.split(' ').includes(state.scene);
@@ -273,10 +284,16 @@ function rebuild(): void {
           radius: state.radius,
           radialSegments: state.radialSegments,
           generateStartCap: state.startCap,
-          generateEndCap: state.endCap
+          generateEndCap: state.endCap,
+          cornerTransition: state.cornerTransition
         });
       } else if (state.scene === 'ribbon') {
-        data = geometry.createRibbon(frames, { width: state.width, side: state.side, arrow: state.arrow, sharp: state.sharp });
+        data = geometry.createRibbon(frames, {
+          width: state.width,
+          side: state.side,
+          arrow: state.arrow,
+          cornerTransition: state.cornerTransition
+        });
       } else {
         const contour = [[-0.9, -0.65], [-0.9, 0.65], [0.9, 0.65], [0.9, -0.65]];
         const holes = state.withHole ? [[[-0.38, -0.25], [0.38, -0.25], [0.38, 0.25], [-0.38, 0.25]]] : undefined;
@@ -285,7 +302,8 @@ function rebuild(): void {
           ...(holes ? { holes } : {}),
           ...(state.alongPath ? { pathFrames: frames } : { depth: 3 }),
           generateTop: state.generateTop,
-          generateBottom: state.generateBottom
+          generateBottom: state.generateBottom,
+          cornerTransition: state.cornerTransition
         });
       }
       lab.addMesh(data, { wireframe: state.wireframe, normals: state.normals, side: state.materialSide });
@@ -318,7 +336,7 @@ function setInitialValues(): void {
   input<HTMLInputElement>('width').value = String(state.width);
   input<HTMLSelectElement>('side').value = state.side;
   input<HTMLInputElement>('arrow').checked = state.arrow;
-  input<HTMLInputElement>('sharp').checked = state.sharp;
+  input<HTMLInputElement>('corner-transition').checked = state.cornerTransition;
   input<HTMLInputElement>('wireframe').checked = state.wireframe;
   input<HTMLInputElement>('normals').checked = state.normals;
   input<HTMLSelectElement>('material-side').value = state.materialSide;
@@ -338,7 +356,11 @@ function updateOutputs(): void {
 
 const bindings: Record<string, (target: HTMLInputElement | HTMLSelectElement) => void> = {
   preset: target => { state.preset = target.value as PresetId; },
-  'path-mode': target => { state.pathMode = target.value as PathMode; },
+  'path-mode': target => {
+    state.pathMode = target.value as PathMode;
+    state.cornerTransition = state.pathMode === 'polyline';
+    input<HTMLInputElement>('corner-transition').checked = state.cornerTransition;
+  },
   divisions: target => { state.divisions = Number(target.value); },
   marker: target => { state.marker = Number(target.value); },
   'initial-normal': target => { state.initialNormal = target.value as InitialNormal; },
@@ -352,7 +374,7 @@ const bindings: Record<string, (target: HTMLInputElement | HTMLSelectElement) =>
   width: target => { state.width = Number(target.value); },
   side: target => { state.side = target.value as RibbonSide; },
   arrow: target => { state.arrow = (target as HTMLInputElement).checked; },
-  sharp: target => { state.sharp = (target as HTMLInputElement).checked; },
+  'corner-transition': target => { state.cornerTransition = (target as HTMLInputElement).checked; },
   wireframe: target => { state.wireframe = (target as HTMLInputElement).checked; },
   normals: target => { state.normals = (target as HTMLInputElement).checked; },
   'material-side': target => { state.materialSide = target.value as MaterialSide; },

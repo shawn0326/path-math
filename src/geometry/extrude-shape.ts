@@ -96,8 +96,8 @@ export function createExtrudeShape(shape: BuildExtrudeShapeOptions): GeometryDat
   if (profile.loops[0]!.points.length < 3) return createGeometry();
 
   const sections = pathFrames
-    ? createSweepSections(pathFrames, {
-      scaleNonSharp: false,
+    ? createSweepSections(profile, pathFrames, {
+      cornerTransition: shape.cornerTransition ?? false,
       sanitizeWidthScale: false
     })
     : createLinearSweepSections(depth);
@@ -116,7 +116,7 @@ export function createExtrudeShape(shape: BuildExtrudeShapeOptions): GeometryDat
 
     if (surface === 'side') {
       u = -profileDistance;
-      v = pathFrames ? -sections[sectionIndex]!.length : sections[sectionIndex]!.point[2]!;
+      v = pathFrames ? -sections[sectionIndex]!.length : sections[sectionIndex]!.origin[2]!;
     } else if (surface === 'start-cap') {
       u = negativeDepth ? -point[0]! : point[0]!;
       v = point[1]!;
