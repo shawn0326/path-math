@@ -1,5 +1,5 @@
 import { vec3 } from '../vector';
-import type { ReadonlyVector3, Vector3 } from '../vector';
+import type { ReadonlyVector, Vector3 } from '../vector';
 import type { BuildExtrudeShapeOptions, ExtrudeShapePoint, GeometryData, PathFrames } from '../types';
 import { triangulate } from './earcut';
 
@@ -95,7 +95,7 @@ function convertShapeDataToEarcut(shape: BuildExtrudeShapeOptions, vertices: num
   }
 }
 
-function scaleAlong(out: Vector3, value: ReadonlyVector3, axis: ReadonlyVector3, scale: number): Vector3 {
+function scaleAlong(out: Vector3, value: ReadonlyVector, axis: ReadonlyVector, scale: number): Vector3 {
   const axisLengthSq = vec3.squaredLength(axis);
 
   if (axisLengthSq <= 0) {

@@ -1,4 +1,4 @@
-import type { Vector3, ReadonlyVector3 } from './vector';
+import type { ReadonlyVector, Vector3 } from './vector';
 
 /**
  * A 3D straight line segment.
@@ -118,11 +118,11 @@ export interface Path {
   /** Return a fluent writer bound to this path. 返回绑定到当前 path 的链式 writer。*/
   writer(): PathWriter;
   /** Replace contents with a polyline through the given points. 用给定点的折线替换内容。*/
-  setPolyline(points: ReadonlyVector3[], options?: PolylineOptions): Path;
+  setPolyline(points: ReadonlyVector[], options?: PolylineOptions): Path;
   /** Replace contents with t3d-style smooth cubic curves. 用 t3d 风格平滑三次曲线替换内容。*/
-  setSmoothCurve(points: ReadonlyVector3[], options?: SmoothCurveOptions): Path;
+  setSmoothCurve(points: ReadonlyVector[], options?: SmoothCurveOptions): Path;
   /** Replace contents with straight edges and beveled corners. 用直边加倒角曲线替换内容。*/
-  setBeveledCurve(points: ReadonlyVector3[], options?: BeveledCurveOptions): Path;
+  setBeveledCurve(points: ReadonlyVector[], options?: BeveledCurveOptions): Path;
   /** Get the total arc length of the path. 获取 path 的总弧长。*/
   getLength(): number;
   /** Get cumulative arc-length table across all segments. 获取累计弧长表。*/
@@ -239,7 +239,7 @@ export interface PathFrames {
  */
 export interface BuildFramesOptions {
   /** Initial normal direction. When omitted, a stable perpendicular axis is chosen. 初始法线方向，省略时自动选择稳定的垂直轴。*/
-  initialNormal?: ReadonlyVector3 | null;
+  initialNormal?: ReadonlyVector | null;
   /** Number of samples per non-line segment. Line segments always use one division. 非直线 segment 的采样数，直线 segment 始终使用一个分段。*/
   divisions?: number;
   /** Use parallel-transport frame propagation. 使用平行传输法传播 frame。*/
@@ -341,5 +341,4 @@ export interface BuildRibbonOptions {
  * Read-only 3D vector input accepted by path-geometry APIs.
  * path-geometry API 接受的只读三维向量输入。
  */
-export type ReadonlyVector = ReadonlyVector3;
-export type { Vector3 };
+export type { ReadonlyVector, Vector3 };

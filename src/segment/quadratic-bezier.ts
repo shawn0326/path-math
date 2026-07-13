@@ -1,5 +1,5 @@
 import { vec3 } from '../vector';
-import type { Vector3, ReadonlyVector3 } from '../vector';
+import type { ReadonlyVector, Vector3 } from '../vector';
 import type { QuadraticBezierSegment } from '../types';
 import { getSegmentLength, getSegmentLengths, getSegmentPoints, getSegmentSpacedPoints, mapUToT, markSegmentDirty, segmentOps } from './shared';
 import type { SegmentCacheState } from './shared';
@@ -19,7 +19,7 @@ class QuadraticBezierSegmentImpl implements QuadraticBezierSegment {
   arcLengthDivisions = 200;
   _needsUpdate = true;
 
-  constructor(p0: ReadonlyVector3 = vec3.create(), p1: ReadonlyVector3 = vec3.create(), p2: ReadonlyVector3 = vec3.create()) {
+  constructor(p0: ReadonlyVector = vec3.create(), p1: ReadonlyVector = vec3.create(), p2: ReadonlyVector = vec3.create()) {
     this.p0 = vec3.clone(p0);
     this.p1 = vec3.clone(p1);
     this.p2 = vec3.clone(p2);
@@ -74,6 +74,6 @@ class QuadraticBezierSegmentImpl implements QuadraticBezierSegment {
     markSegmentDirty(this);
   }
 }
-export function createQuadraticBezier(p0: ReadonlyVector3 = vec3.create(), p1: ReadonlyVector3 = vec3.create(), p2: ReadonlyVector3 = vec3.create()): QuadraticBezierSegment {
+export function createQuadraticBezier(p0: ReadonlyVector = vec3.create(), p1: ReadonlyVector = vec3.create(), p2: ReadonlyVector = vec3.create()): QuadraticBezierSegment {
   return new QuadraticBezierSegmentImpl(p0, p1, p2);
 }

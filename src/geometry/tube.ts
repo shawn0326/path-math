@@ -1,5 +1,5 @@
 import { vec3 } from '../vector';
-import type { Vector3, ReadonlyVector3 } from '../vector';
+import type { ReadonlyVector, Vector3 } from '../vector';
 import type { BuildTubeOptions, GeometryData, PathFrames } from '../types';
 import { rotateAroundAxis } from '../helper';
 
@@ -36,7 +36,7 @@ function normalizeScale(value: number | undefined): number {
   return value;
 }
 
-function scaleAlong(out: Vector3, value: ReadonlyVector3, axis: ReadonlyVector3, scale: number): Vector3 {
+function scaleAlong(out: Vector3, value: ReadonlyVector, axis: ReadonlyVector, scale: number): Vector3 {
   const axisLengthSq = vec3.squaredLength(axis);
 
   if (axisLengthSq <= 0) {
@@ -54,14 +54,14 @@ function scaleAlong(out: Vector3, value: ReadonlyVector3, axis: ReadonlyVector3,
   return out;
 }
 
-function pushVec3(target: number[], value: ReadonlyVector3): void {
+function pushVec3(target: number[], value: ReadonlyVector): void {
   target.push(value[0]!, value[1]!, value[2]!);
 }
 
 function pushDuplicateVertex(
   geometry: GeometryData,
   sourceIndex: number,
-  normal: ReadonlyVector3
+  normal: ReadonlyVector
 ): void {
   const positionOffset = sourceIndex * 3;
   const uvOffset = sourceIndex * 2;

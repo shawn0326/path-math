@@ -1,5 +1,5 @@
 import { vec3 } from './vector';
-import type { Vector3, ReadonlyVector3 } from './vector';
+import type { ReadonlyVector, Vector3 } from './vector';
 import type { BeveledCurveOptions, BuildFramesOptions, Path, PathFrames, PointPreprocessOptions, PolylineOptions, Segment, SmoothCurveOptions, PathWriter } from './types';
 import { segment } from './segment';
 import { clamp, EPSILON, resolveDivisions, rotateAroundAxis } from './helper';
@@ -20,7 +20,7 @@ type PathState = Path & {
   _needsUpdate?: boolean;
 };
 
-function initialNormal3(out: Vector3, tangent: ReadonlyVector3, initialNormal?: ReadonlyVector3 | null): Vector3 {
+function initialNormal3(out: Vector3, tangent: ReadonlyVector, initialNormal?: ReadonlyVector | null): Vector3 {
   if (initialNormal) {
     vec3.copy(out, initialNormal);
   } else {
@@ -34,7 +34,7 @@ function initialNormal3(out: Vector3, tangent: ReadonlyVector3, initialNormal?: 
   return out;
 }
 
-function transportNormal3(out: Vector3, previousNormal: ReadonlyVector3, previousTangent: ReadonlyVector3, tangent: ReadonlyVector3): Vector3 {
+function transportNormal3(out: Vector3, previousNormal: ReadonlyVector, previousTangent: ReadonlyVector, tangent: ReadonlyVector): Vector3 {
   vec3.cross(_axis, previousTangent, tangent);
   if (vec3.len(_axis) > EPSILON) {
     vec3.normalize(_axis, _axis);
@@ -46,7 +46,7 @@ function transportNormal3(out: Vector3, previousNormal: ReadonlyVector3, previou
   return out;
 }
 
-function orthonormalize3(outNormal: Vector3, outBinormal: Vector3, tangent: ReadonlyVector3, normal: ReadonlyVector3): void {
+function orthonormalize3(outNormal: Vector3, outBinormal: Vector3, tangent: ReadonlyVector, normal: ReadonlyVector): void {
   vec3.cross(outBinormal, tangent, normal);
   if (vec3.len(outBinormal) <= EPSILON) {
     initialNormal3(outNormal, tangent);
@@ -57,11 +57,11 @@ function orthonormalize3(outNormal: Vector3, outBinormal: Vector3, tangent: Read
   vec3.normalize(outNormal, outNormal);
 }
 
-function vecEquals(a: ReadonlyVector3, b: ReadonlyVector3): boolean {
+function vecEquals(a: ReadonlyVector, b: ReadonlyVector): boolean {
   return a[0] === b[0]! && a[1] === b[1]! && a[2] === b[2]!;
 }
 
-function preprocessInputPoints(points: ReadonlyVector3[], options: PointPreprocessOptions = {}): Vector3[] {
+function preprocessInputPoints(points: ReadonlyVector[], options: PointPreprocessOptions = {}): Vector3[] {
   const removeConsecutiveDuplicates = options.removeConsecutiveDuplicates !== false;
   const removeClosingDuplicate = options.removeClosingDuplicate ?? options.close === true;
   const normalized: Vector3[] = [];
@@ -77,28 +77,28 @@ function preprocessInputPoints(points: ReadonlyVector3[], options: PointPreproce
   return normalized;
 }
 
-function componentMin(out: Vector3, a: ReadonlyVector3, b: ReadonlyVector3): Vector3 {
+function componentMin(out: Vector3, a: ReadonlyVector, b: ReadonlyVector): Vector3 {
   out[0] = Math.min(a[0]!, b[0]!);
   out[1] = Math.min(a[1]!, b[1]!);
   out[2] = Math.min(a[2]!, b[2]!);
   return out;
 }
 
-function componentMax(out: Vector3, a: ReadonlyVector3, b: ReadonlyVector3): Vector3 {
+function componentMax(out: Vector3, a: ReadonlyVector, b: ReadonlyVector): Vector3 {
   out[0] = Math.max(a[0]!, b[0]!);
   out[1] = Math.max(a[1]!, b[1]!);
   out[2] = Math.max(a[2]!, b[2]!);
   return out;
 }
 
-function clampPointBetween(out: Vector3, value: ReadonlyVector3, a: ReadonlyVector3, b: ReadonlyVector3): Vector3 {
+function clampPointBetween(out: Vector3, value: ReadonlyVector, a: ReadonlyVector, b: ReadonlyVector): Vector3 {
   componentMax(_p3a, a, b);
   componentMin(_p3b, value, _p3a);
   componentMin(_p3a, a, b);
   return componentMax(out, _p3b, _p3a);
 }
 
-function normalizeOrFallback(out: Vector3, fallback?: ReadonlyVector3): Vector3 {
+function normalizeOrFallback(out: Vector3, fallback?: ReadonlyVector): Vector3 {
   if (vec3.len(out) <= EPSILON) {
     if (fallback) vec3.copy(out, fallback);
     else vec3.set(out, 1, 0, 0);
@@ -174,7 +174,7 @@ function pathTangentAtDistance(out: Vector3, path: PathState, distance: number):
   return segment_.tangentAt(out, t);
 }
 
-function setPathPolyline(path: PathState, points: ReadonlyVector3[], options: PolylineOptions = {}): Path {
+function setPathPolyline(path: PathState, points: ReadonlyVector[], options: PolylineOptions = {}): Path {
   path.segments.length = 0;
   const close = options.close === true;
   if (points.length < 2) {
@@ -191,7 +191,7 @@ function setPathPolyline(path: PathState, points: ReadonlyVector3[], options: Po
   return path;
 }
 
-function setPathSmoothCurve(path: PathState, points: ReadonlyVector3[], options: SmoothCurveOptions = {}): Path {
+function setPathSmoothCurve(path: PathState, points: ReadonlyVector[], options: SmoothCurveOptions = {}): Path {
   const smooth = options.smooth || 0;
   const close = options.close === true;
   if (close) {
@@ -262,7 +262,7 @@ function setPathSmoothCurve(path: PathState, points: ReadonlyVector3[], options:
   return path;
 }
 
-function setPathBeveledCurve(path: PathState, points: ReadonlyVector3[], options: BeveledCurveOptions = {}): Path {
+function setPathBeveledCurve(path: PathState, points: ReadonlyVector[], options: BeveledCurveOptions = {}): Path {
   const bevelRadius = options.bevelRadius || 0;
   const close = options.close || false;
   if (points.length < 2 || bevelRadius === 0 || points.length === 2) {
@@ -494,15 +494,15 @@ class PathImpl implements Path {
     return path.writer(this);
   }
 
-  setPolyline(points: ReadonlyVector3[], options?: PolylineOptions): Path {
+  setPolyline(points: ReadonlyVector[], options?: PolylineOptions): Path {
     return setPathPolyline(this, points, options);
   }
 
-  setSmoothCurve(points: ReadonlyVector3[], options?: SmoothCurveOptions): Path {
+  setSmoothCurve(points: ReadonlyVector[], options?: SmoothCurveOptions): Path {
     return setPathSmoothCurve(this, points, options);
   }
 
-  setBeveledCurve(points: ReadonlyVector3[], options?: BeveledCurveOptions): Path {
+  setBeveledCurve(points: ReadonlyVector[], options?: BeveledCurveOptions): Path {
     return setPathBeveledCurve(this, points, options);
   }
 
@@ -572,7 +572,7 @@ export const path = {
    * Preprocess a raw point array (remove duplicates, handle closing).
    * 预处理原始点数组（移除重复点、处理闭合）。
    */
-  preprocessPoints(points: ReadonlyVector3[], options: PointPreprocessOptions = {}): Vector3[] {
+  preprocessPoints(points: ReadonlyVector[], options: PointPreprocessOptions = {}): Vector3[] {
     return preprocessInputPoints(points, options);
   },
 
@@ -585,27 +585,27 @@ export const path = {
     let currentPoint: Vector3 | null = null;
     let subpathStart: Vector3 | null = null;
 
-    function moveTo(point: ReadonlyVector3) {
+    function moveTo(point: ReadonlyVector) {
       currentPoint = vec3.clone(point);
       subpathStart = vec3.clone(point);
       return api;
     }
 
-    function lineTo(point: ReadonlyVector3) {
+    function lineTo(point: ReadonlyVector) {
       if (!currentPoint) return moveTo(point);
       target.addSegment(segment.createLine(currentPoint, point));
       vec3.copy(currentPoint, point);
       return api;
     }
 
-    function quadraticTo(control: ReadonlyVector3, point: ReadonlyVector3) {
+    function quadraticTo(control: ReadonlyVector, point: ReadonlyVector) {
       if (!currentPoint) return moveTo(point);
       target.addSegment(segment.createQuadraticBezier(currentPoint, control, point));
       vec3.copy(currentPoint, point);
       return api;
     }
 
-    function cubicTo(control1: ReadonlyVector3, control2: ReadonlyVector3, point: ReadonlyVector3) {
+    function cubicTo(control1: ReadonlyVector, control2: ReadonlyVector, point: ReadonlyVector) {
       if (!currentPoint) return moveTo(point);
       target.addSegment(segment.createCubicBezier(currentPoint, control1, control2, point));
       vec3.copy(currentPoint, point);

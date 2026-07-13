@@ -1,5 +1,5 @@
 import { vec3 } from './vector';
-import type { Vector3, ReadonlyVector3 } from './vector';
+import type { ReadonlyVector, Vector3 } from './vector';
 
 export const EPSILON = Number.EPSILON;
 
@@ -15,7 +15,7 @@ export function resolveDivisions(value: number | undefined, defaultValue: number
 
 const _cross = vec3.create();
 
-export function rotateAroundAxis(out: Vector3, v: ReadonlyVector3, axis: ReadonlyVector3, angle: number): Vector3 {
+export function rotateAroundAxis(out: Vector3, v: ReadonlyVector, axis: ReadonlyVector, angle: number): Vector3 {
   const c = Math.cos(angle);
   const s = Math.sin(angle);
   const dot = vec3.dot(axis, v);

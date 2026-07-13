@@ -1,5 +1,5 @@
 import { vec3 } from '../vector';
-import type { Vector3, ReadonlyVector3 } from '../vector';
+import type { ReadonlyVector, Vector3 } from '../vector';
 import type { CubicBezierSegment } from '../types';
 import { getSegmentLength, getSegmentLengths, getSegmentPoints, getSegmentSpacedPoints, mapUToT, markSegmentDirty, segmentOps } from './shared';
 import type { SegmentCacheState } from './shared';
@@ -20,7 +20,7 @@ class CubicBezierSegmentImpl implements CubicBezierSegment {
   arcLengthDivisions = 200;
   _needsUpdate = true;
 
-  constructor(p0: ReadonlyVector3 = vec3.create(), p1: ReadonlyVector3 = vec3.create(), p2: ReadonlyVector3 = vec3.create(), p3: ReadonlyVector3 = vec3.create()) {
+  constructor(p0: ReadonlyVector = vec3.create(), p1: ReadonlyVector = vec3.create(), p2: ReadonlyVector = vec3.create(), p3: ReadonlyVector = vec3.create()) {
     this.p0 = vec3.clone(p0);
     this.p1 = vec3.clone(p1);
     this.p2 = vec3.clone(p2);
@@ -77,6 +77,6 @@ class CubicBezierSegmentImpl implements CubicBezierSegment {
     markSegmentDirty(this);
   }
 }
-export function createCubicBezier(p0: ReadonlyVector3 = vec3.create(), p1: ReadonlyVector3 = vec3.create(), p2: ReadonlyVector3 = vec3.create(), p3: ReadonlyVector3 = vec3.create()): CubicBezierSegment {
+export function createCubicBezier(p0: ReadonlyVector = vec3.create(), p1: ReadonlyVector = vec3.create(), p2: ReadonlyVector = vec3.create(), p3: ReadonlyVector = vec3.create()): CubicBezierSegment {
   return new CubicBezierSegmentImpl(p0, p1, p2, p3);
 }

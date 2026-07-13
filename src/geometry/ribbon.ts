@@ -1,5 +1,5 @@
 import { vec3 } from '../vector';
-import type { Vector3, ReadonlyVector3 } from '../vector';
+import type { ReadonlyVector, Vector3 } from '../vector';
 import type { BuildRibbonOptions, GeometryData, RibbonSide, PathFrames } from '../types';
 
 const DEFAULT_WIDTH = 0.1;
@@ -30,11 +30,11 @@ function normalizeSide(value: RibbonSide | undefined): RibbonSide {
   return value === 'left' || value === 'right' ? value : 'both';
 }
 
-function pushVec3(target: number[], value: ReadonlyVector3): void {
+function pushVec3(target: number[], value: ReadonlyVector): void {
   target.push(value[0]!, value[1]!, value[2]!);
 }
 
-function pushNormal(target: number[], normal: ReadonlyVector3, count: number): void {
+function pushNormal(target: number[], normal: ReadonlyVector, count: number): void {
   for (let i = 0; i < count; i++) {
     pushVec3(target, normal);
   }
@@ -48,7 +48,7 @@ function readLastVertex(out: Vector3, positions: number[], offsetFromEnd: number
   return out;
 }
 
-function setLength(out: Vector3, value: ReadonlyVector3, length: number): Vector3 {
+function setLength(out: Vector3, value: ReadonlyVector, length: number): Vector3 {
   const currentLength = vec3.length(value);
 
   if (currentLength <= 0 || !Number.isFinite(currentLength)) {
@@ -61,8 +61,8 @@ function setLength(out: Vector3, value: ReadonlyVector3, length: number): Vector
 
 function computeEdge(
   out: Vector3,
-  point: ReadonlyVector3,
-  binormal: ReadonlyVector3,
+  point: ReadonlyVector,
+  binormal: ReadonlyVector,
   halfWidth: number,
   widthScale: number,
   sign: number,
@@ -78,9 +78,9 @@ function computeEdge(
 
 function pushSimplePair(
   geometry: GeometryData,
-  left: ReadonlyVector3,
-  right: ReadonlyVector3,
-  normal: ReadonlyVector3,
+  left: ReadonlyVector,
+  right: ReadonlyVector,
+  normal: ReadonlyVector,
   uvU: number,
   uvU2: number
 ): void {
