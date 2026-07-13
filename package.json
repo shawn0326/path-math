@@ -47,6 +47,7 @@
     "site:dev": "npm run docs && npm run dev --workspace=@path-geometry/site",
     "site:build": "npm run build && npm run build --workspace=@path-geometry/site",
     "pages:build": "npm run site:build && npm run docs",
+    "bench:sweep": "npm run build && node --expose-gc benchmarks/sweep.mjs",
     "check": "npm run typecheck && npm run test && npm run typecheck --workspace=@path-geometry/site",
     "prepack": "npm run build",
     "prepublishOnly": "npm run typecheck && npm run test",

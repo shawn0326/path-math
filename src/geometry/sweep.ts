@@ -4,7 +4,7 @@ import type { GeometryData, PathFrames } from '../types';
 import { triangulate } from './earcut';
 import {
   createCornerSections,
-  transformCornerNormal,
+  transformCornerNormalComponents,
   transformCornerPoint
 } from './corner';
 import type { CornerSection } from './corner';
@@ -50,6 +50,7 @@ interface SweepLoopMetrics {
   cumulativeLengths: number[];
   totalLength: number;
   edgeCount: number;
+  profileNormals: number[] | null;
 }
 
 export interface CreateSweepSectionsOptions {
@@ -84,10 +85,11 @@ function getDistance(a: ReadonlyArray<number>, b: ReadonlyArray<number>): number
   return Math.hypot(b[0]! - a[0]!, b[1]! - a[1]!);
 }
 
-function createLoopMetrics(loop: SweepProfileLoop): SweepLoopMetrics {
+function createLoopMetrics(loop: SweepProfileLoop, includeProfileNormals: boolean): SweepLoopMetrics {
   const pointCount = loop.points.length;
   const edgeCount = loop.closed ? pointCount : Math.max(0, pointCount - 1);
   const cumulativeLengths = new Array<number>(pointCount).fill(0);
+  const profileNormals = includeProfileNormals ? new Array<number>(pointCount * 2) : null;
   let totalLength = 0;
 
   for (let i = 1; i < pointCount; i++) {
@@ -99,11 +101,18 @@ function createLoopMetrics(loop: SweepProfileLoop): SweepLoopMetrics {
     totalLength += getDistance(loop.points[pointCount - 1]!, loop.points[0]!);
   }
 
-  return { cumulativeLengths, totalLength, edgeCount };
+  if (profileNormals) {
+    for (let pointIndex = 0; pointIndex < pointCount; pointIndex++) {
+      writeProfileNormal(profileNormals, pointIndex * 2, loop, pointIndex);
+    }
+  }
+
+  return { cumulativeLengths, totalLength, edgeCount, profileNormals };
 }
 
-function getProfileNormal(
+function writeProfileNormal(
   out: number[],
+  offset: number,
   loop: SweepProfileLoop,
   pointIndex: number
 ): void {
@@ -111,8 +120,8 @@ function getProfileNormal(
   if (supplied) {
     const length = Math.hypot(supplied[0]!, supplied[1]!);
     if (length > 0) {
-      out[0] = supplied[0]! / length;
-      out[1] = supplied[1]! / length;
+      out[offset] = supplied[0]! / length;
+      out[offset + 1] = supplied[1]! / length;
       return;
     }
   }
@@ -138,11 +147,11 @@ function getProfileNormal(
   const length = Math.hypot(nx, ny);
 
   if (length > 0) {
-    out[0] = nx / length;
-    out[1] = ny / length;
+    out[offset] = nx / length;
+    out[offset + 1] = ny / length;
   } else {
-    out[0] = 0;
-    out[1] = 0;
+    out[offset] = 0;
+    out[offset + 1] = 0;
   }
 }
 
@@ -157,9 +166,10 @@ function transformPoint(
 function transformNormal(
   out: Vector3,
   section: SweepSection,
-  profileNormal: number[]
+  profileNormalX: number,
+  profileNormalY: number
 ): Vector3 {
-  return transformCornerNormal(out, section, profileNormal);
+  return transformCornerNormalComponents(out, section, profileNormalX, profileNormalY);
 }
 
 function pushTriangle(indices: number[], a: number, b: number, c: number, flip: boolean): void {
@@ -214,11 +224,10 @@ function addVertex(
   pointIndex: number,
   profileStep: number,
   profileDistance: number,
-  analyticNormal: boolean,
+  profileNormals: number[] | null,
   attributeSink: SweepAttributeSink,
   position: Vector3,
-  normal: Vector3,
-  profileNormal: number[]
+  normal: Vector3
 ): number {
   const loop = profile.loops[loopIndex]!;
   const point = loop.points[pointIndex]!;
@@ -227,9 +236,14 @@ function addVertex(
   transformPoint(position, section, point);
   pushVec3(geometry.positions, position);
 
-  if (analyticNormal) {
-    getProfileNormal(profileNormal, loop, pointIndex);
-    transformNormal(normal, section, profileNormal);
+  if (profileNormals) {
+    const normalOffset = pointIndex * 2;
+    transformNormal(
+      normal,
+      section,
+      profileNormals[normalOffset]!,
+      profileNormals[normalOffset + 1]!
+    );
     pushVec3(geometry.normals, normal);
   }
 
@@ -243,29 +257,26 @@ function addSharedSides(
   sections: SweepSection[],
   loopMetrics: SweepLoopMetrics[],
   flipWinding: boolean,
-  analyticNormals: boolean,
   attributeSink: SweepAttributeSink
 ): void {
   const position = vec3.create();
   const normal = vec3.create();
-  const profileNormal = [0, 0];
-  let previousSectionRings: number[][] | null = null;
+  let previousRingStarts = new Array<number>(profile.loops.length).fill(-1);
+  let currentRingStarts = new Array<number>(profile.loops.length).fill(-1);
 
   for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
-    const sectionRings: number[][] = [];
-
     for (let loopIndex = 0; loopIndex < profile.loops.length; loopIndex++) {
       const loop = profile.loops[loopIndex]!;
       const metrics = loopMetrics[loopIndex]!;
-      const ring: number[] = [];
       const vertexCount = loop.points.length + (loop.closed && loop.points.length > 0 ? 1 : 0);
+      currentRingStarts[loopIndex] = geometry.positions.length / 3;
 
       for (let profileStep = 0; profileStep < vertexCount; profileStep++) {
         const pointIndex = profileStep === loop.points.length ? 0 : profileStep;
         const profileDistance = profileStep === loop.points.length
           ? metrics.totalLength
           : metrics.cumulativeLengths[pointIndex]!;
-        ring.push(addVertex(
+        addVertex(
           geometry,
           profile,
           sections,
@@ -275,31 +286,28 @@ function addSharedSides(
           pointIndex,
           profileStep,
           profileDistance,
-          analyticNormals,
+          metrics.profileNormals,
           attributeSink,
           position,
-          normal,
-          profileNormal
-        ));
+          normal
+        );
       }
-
-      sectionRings.push(ring);
     }
 
-    if (previousSectionRings) {
+    if (sectionIndex > 0) {
       for (let loopIndex = 0; loopIndex < profile.loops.length; loopIndex++) {
-        const previous = previousSectionRings[loopIndex]!;
-        const current = sectionRings[loopIndex]!;
+        const previous = previousRingStarts[loopIndex]!;
+        const current = currentRingStarts[loopIndex]!;
         const edgeCount = loopMetrics[loopIndex]!.edgeCount;
         const collapseAware = sections[sectionIndex]!.collapsePrevious;
 
         for (let edgeIndex = 0; edgeIndex < edgeCount; edgeIndex++) {
           connectQuad(
             geometry,
-            previous[edgeIndex]!,
-            previous[edgeIndex + 1]!,
-            current[edgeIndex]!,
-            current[edgeIndex + 1]!,
+            previous + edgeIndex,
+            previous + edgeIndex + 1,
+            current + edgeIndex,
+            current + edgeIndex + 1,
             flipWinding,
             collapseAware
           );
@@ -307,7 +315,9 @@ function addSharedSides(
       }
     }
 
-    previousSectionRings = sectionRings;
+    const ringStarts = previousRingStarts;
+    previousRingStarts = currentRingStarts;
+    currentRingStarts = ringStarts;
   }
 }
 
@@ -317,12 +327,10 @@ function addEdgeIsolatedSides(
   sections: SweepSection[],
   loopMetrics: SweepLoopMetrics[],
   flipWinding: boolean,
-  analyticNormals: boolean,
   attributeSink: SweepAttributeSink
 ): void {
   const position = vec3.create();
   const normal = vec3.create();
-  const profileNormal = [0, 0];
 
   for (let loopIndex = 0; loopIndex < profile.loops.length; loopIndex++) {
     const loop = profile.loops[loopIndex]!;
@@ -349,11 +357,10 @@ function addEdgeIsolatedSides(
           firstPointIndex,
           edgeIndex,
           firstDistance,
-          analyticNormals,
+          metrics.profileNormals,
           attributeSink,
           position,
-          normal,
-          profileNormal
+          normal
         );
         const second = addVertex(
           geometry,
@@ -365,11 +372,10 @@ function addEdgeIsolatedSides(
           secondPointIndex,
           edgeIndex + 1,
           secondDistance,
-          analyticNormals,
+          metrics.profileNormals,
           attributeSink,
           position,
-          normal,
-          profileNormal
+          normal
         );
 
         if (sectionIndex > 0) {
@@ -392,32 +398,39 @@ function addEdgeIsolatedSides(
 }
 
 interface CapProfileData {
-  points: Array<{ loopIndex: number; pointIndex: number }>;
+  loopIndices: number[];
+  pointIndices: number[];
   triangles: number[];
 }
 
 function createCapProfileData(profile: SweepProfile): CapProfileData {
-  const vertices: number[] = [];
-  const holeIndices: number[] = [];
-  const points: Array<{ loopIndex: number; pointIndex: number }> = [];
+  const shouldTriangulate = profile.capTriangles === undefined;
+  const vertices: number[] | null = shouldTriangulate ? [] : null;
+  const holeIndices: number[] | null = shouldTriangulate ? [] : null;
+  const loopIndices: number[] = [];
+  const pointIndices: number[] = [];
   let closedLoopCount = 0;
 
   for (let loopIndex = 0; loopIndex < profile.loops.length; loopIndex++) {
     const loop = profile.loops[loopIndex]!;
     if (!loop.closed || loop.points.length < 3) continue;
-    if (closedLoopCount > 0) holeIndices.push(points.length);
+    if (vertices && holeIndices && closedLoopCount > 0) holeIndices.push(loopIndices.length);
     closedLoopCount++;
 
     for (let pointIndex = 0; pointIndex < loop.points.length; pointIndex++) {
       const point = loop.points[pointIndex]!;
-      vertices.push(point[0]!, point[1]!);
-      points.push({ loopIndex, pointIndex });
+      if (vertices) vertices.push(point[0]!, point[1]!);
+      loopIndices.push(loopIndex);
+      pointIndices.push(pointIndex);
     }
   }
 
   return {
-    points,
-    triangles: profile.capTriangles ?? (closedLoopCount > 0 ? triangulate(vertices, holeIndices) : [])
+    loopIndices,
+    pointIndices,
+    triangles: profile.capTriangles ?? (
+      closedLoopCount > 0 ? triangulate(vertices!, holeIndices!) : []
+    )
   };
 }
 
@@ -432,7 +445,7 @@ function addCap(
   analyticNormals: boolean,
   attributeSink: SweepAttributeSink
 ): void {
-  if (capData.points.length === 0 || sections.length === 0) return;
+  if (capData.loopIndices.length === 0 || sections.length === 0) return;
 
   const isEnd = surface === 'end-cap';
   const sectionIndex = isEnd ? sections.length - 1 : 0;
@@ -444,22 +457,23 @@ function addCap(
   vec3.normalize(capNormal, section.tangent);
   if (!isEnd) vec3.scale(capNormal, capNormal, -1);
 
-  for (let i = 0; i < capData.points.length; i++) {
-    const source = capData.points[i]!;
-    const loop = profile.loops[source.loopIndex]!;
-    const point = loop.points[source.pointIndex]!;
+  for (let i = 0; i < capData.loopIndices.length; i++) {
+    const loopIndex = capData.loopIndices[i]!;
+    const pointIndex = capData.pointIndices[i]!;
+    const loop = profile.loops[loopIndex]!;
+    const point = loop.points[pointIndex]!;
     transformPoint(position, section, point);
     pushVec3(geometry.positions, position);
     if (analyticNormals) pushVec3(geometry.normals, capNormal);
 
-    const profileDistance = loopMetrics[source.loopIndex]!.cumulativeLengths[source.pointIndex]!;
+    const profileDistance = loopMetrics[loopIndex]!.cumulativeLengths[pointIndex]!;
     attributeSink(
       geometry,
       surface,
       sectionIndex,
-      source.loopIndex,
-      source.pointIndex,
-      source.pointIndex,
+      loopIndex,
+      pointIndex,
+      pointIndex,
       profileDistance
     );
     vertexIndices.push(geometry.positions.length / 3 - 1);
@@ -574,24 +588,24 @@ export function createSweep(
   options: SweepOptions
 ): GeometryData {
   const geometry = createGeometry();
-  const loopMetrics = profile.loops.map(createLoopMetrics);
 
   if (sections.length === 0 || profile.loops.length === 0) return geometry;
 
   const flipWinding = options.flipWinding ?? false;
   const analyticNormals = options.normalMode === 'profile';
+  const loopMetrics = profile.loops.map(loop => createLoopMetrics(loop, analyticNormals));
   if (options.sideLayout === 'shared') {
-    addSharedSides(geometry, profile, sections, loopMetrics, flipWinding, analyticNormals, options.attributeSink);
+    addSharedSides(geometry, profile, sections, loopMetrics, flipWinding, options.attributeSink);
   } else {
-    addEdgeIsolatedSides(geometry, profile, sections, loopMetrics, flipWinding, analyticNormals, options.attributeSink);
+    addEdgeIsolatedSides(geometry, profile, sections, loopMetrics, flipWinding, options.attributeSink);
   }
 
-  const capData = options.startCap || options.endCap ? createCapProfileData(profile) : { points: [], triangles: [] };
+  const capData = options.startCap || options.endCap ? createCapProfileData(profile) : null;
   if (options.startCap) {
-    addCap(geometry, profile, sections, loopMetrics, capData, 'start-cap', flipWinding, analyticNormals, options.attributeSink);
+    addCap(geometry, profile, sections, loopMetrics, capData!, 'start-cap', flipWinding, analyticNormals, options.attributeSink);
   }
   if (options.endCap) {
-    addCap(geometry, profile, sections, loopMetrics, capData, 'end-cap', flipWinding, analyticNormals, options.attributeSink);
+    addCap(geometry, profile, sections, loopMetrics, capData!, 'end-cap', flipWinding, analyticNormals, options.attributeSink);
   }
 
   if (options.normalMode === 'mesh') {

@@ -50,29 +50,40 @@ export function scaleAlong(
   return out;
 }
 
-function createNormalAxes(
+function setNormalAxes(
+  normalX: Vector3,
+  normalY: Vector3,
   xAxis: ReadonlyVector,
   yAxis: ReadonlyVector,
   tangent: ReadonlyVector,
   fallbackX: ReadonlyVector,
   fallbackY: ReadonlyVector
-): { normalX: Vector3; normalY: Vector3 } {
-  const normalX = vec3.create();
-  const normalY = vec3.create();
-  const crossYT = vec3.create();
-
-  vec3.cross(crossYT, yAxis, tangent);
-  const determinant = vec3.dot(xAxis, crossYT);
+): void {
+  const crossYTX = yAxis[1]! * tangent[2]! - yAxis[2]! * tangent[1]!;
+  const crossYTY = yAxis[2]! * tangent[0]! - yAxis[0]! * tangent[2]!;
+  const crossYTZ = yAxis[0]! * tangent[1]! - yAxis[1]! * tangent[0]!;
+  const determinant = xAxis[0]! * crossYTX +
+    xAxis[1]! * crossYTY +
+    xAxis[2]! * crossYTZ;
   if (!Number.isFinite(determinant) || Math.abs(determinant) <= EPSILON) {
     vec3.copy(normalX, fallbackX);
     vec3.copy(normalY, fallbackY);
-    return { normalX, normalY };
+    return;
   }
 
-  vec3.scale(normalX, crossYT, 1 / determinant);
-  vec3.cross(normalY, tangent, xAxis);
-  vec3.scale(normalY, normalY, 1 / determinant);
-  return { normalX, normalY };
+  const inverseDeterminant = 1 / determinant;
+  normalX[0] = crossYTX * inverseDeterminant;
+  normalX[1] = crossYTY * inverseDeterminant;
+  normalX[2] = crossYTZ * inverseDeterminant;
+  normalY[0] = (
+    tangent[1]! * xAxis[2]! - tangent[2]! * xAxis[1]!
+  ) * inverseDeterminant;
+  normalY[1] = (
+    tangent[2]! * xAxis[0]! - tangent[0]! * xAxis[2]!
+  ) * inverseDeterminant;
+  normalY[2] = (
+    tangent[0]! * xAxis[1]! - tangent[1]! * xAxis[0]!
+  ) * inverseDeterminant;
 }
 
 function createSection(
@@ -85,13 +96,18 @@ function createSection(
   length: number,
   sourceFrameIndex: number,
   role: CornerSectionRole,
-  collapsePrevious: boolean
+  collapsePrevious: boolean,
+  copyOriginAndTangent = true
 ): CornerSection {
-  const resolvedOrigin = vec3.clone(origin);
-  const resolvedTangent = vec3.clone(tangent);
+  const resolvedOrigin = copyOriginAndTangent ? vec3.clone(origin) : origin;
+  const resolvedTangent = copyOriginAndTangent ? vec3.clone(tangent) : tangent;
   const resolvedXAxis = vec3.clone(xAxis);
   const resolvedYAxis = vec3.clone(yAxis);
-  const { normalX, normalY } = createNormalAxes(
+  const normalX = vec3.create();
+  const normalY = vec3.create();
+  setNormalAxes(
+    normalX,
+    normalY,
     resolvedXAxis,
     resolvedYAxis,
     resolvedTangent,
@@ -181,6 +197,7 @@ export function createCornerSections(
       length,
       frameIndex,
       'regular',
+      false,
       false
     );
 
@@ -251,18 +268,9 @@ export function createCornerSections(
       false
     ));
 
-    sections.push(createSection(
-      center.origin,
-      center.tangent,
-      center.xAxis,
-      center.yAxis,
-      binormal,
-      normal,
-      length,
-      frameIndex,
-      'join-center',
-      true
-    ));
+    center.role = 'join-center';
+    center.collapsePrevious = true;
+    sections.push(center);
 
     vec3.scaleAndAdd(joinOrigin, point, outgoing, innerSupport * transitionFactor);
     vec3.scaleAndAdd(joinXAxis, center.xAxis, outgoing, -supportX * transitionFactor);
@@ -299,7 +307,16 @@ export function transformCornerNormal(
   section: CornerSection,
   normal: ReadonlyArray<number>
 ): Vector3 {
-  vec3.scale(out, section.normalX, normal[0]!);
-  vec3.scaleAndAdd(out, out, section.normalY, normal[1]!);
+  return transformCornerNormalComponents(out, section, normal[0]!, normal[1]!);
+}
+
+export function transformCornerNormalComponents(
+  out: Vector3,
+  section: CornerSection,
+  normalX: number,
+  normalY: number
+): Vector3 {
+  vec3.scale(out, section.normalX, normalX);
+  vec3.scaleAndAdd(out, out, section.normalY, normalY);
   return vec3.normalize(out, out);
 }

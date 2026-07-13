@@ -1327,4 +1327,162 @@ describe('internal sweep core', () => {
     expect(result.indices).toHaveLength(6);
     expect(surfaces).toEqual(['side', 'side', 'side', 'side']);
   });
+
+  it('connects mixed closed and open loops with stable shared-ring indices', () => {
+    const result = createSweep({
+      loops: [
+        {
+          points: [[0, 0], [1, 0], [0, 1]],
+          normals: [[0, 1], [1, 0], [-1, 0]],
+          closed: true
+        },
+        {
+          points: [[2, 0], [3, 0], [4, 0]],
+          normals: [[0, 1], [0, 1], [0, 1]],
+          closed: false
+        }
+      ]
+    }, createLinearSweepSections(2), {
+      sideLayout: 'shared',
+      normalMode: 'profile',
+      startCap: false,
+      endCap: false,
+      attributeSink: geometry => {
+        geometry.uvs.push(0, 0);
+        geometry.uvs2.push(0, 0);
+      }
+    });
+
+    expect(result.positions).toHaveLength(14 * 3);
+    expect(result.indices).toEqual([
+      7, 0, 1, 7, 1, 8,
+      8, 1, 2, 8, 2, 9,
+      9, 2, 3, 9, 3, 10,
+      11, 4, 5, 11, 5, 12,
+      12, 5, 6, 12, 6, 13
+    ]);
+    expectNumberArrayClose(result.positions.slice(0, 3), result.positions.slice(9, 12));
+    expectNumberArrayClose(result.positions.slice(21, 24), result.positions.slice(30, 33));
+  });
+
+  it('keeps partial corner collapses in the shared index layout', () => {
+    const base = createLinearSweepSections(1)[0]!;
+    const result = createSweep({
+      loops: [{
+        points: [[0, 0], [1, 0]],
+        normals: [[0, 1], [0, 1]],
+        closed: false
+      }]
+    }, [
+      base,
+      {
+        ...base,
+        xAxis: [2, 0, 0],
+        normalX: [0.5, 0, 0],
+        sourceFrameIndex: 1,
+        collapsePrevious: true
+      }
+    ], {
+      sideLayout: 'shared',
+      normalMode: 'profile',
+      startCap: false,
+      endCap: false,
+      attributeSink: geometry => {
+        geometry.uvs.push(0, 0);
+        geometry.uvs2.push(0, 0);
+      }
+    });
+
+    expect(result.indices).toEqual([2, 1, 3]);
+  });
+
+  it('precomputes supplied, zero-length and derived profile normals consistently', () => {
+    const result = createSweep({
+      loops: [{
+        points: [[0, 0], [1, 0], [1, 1], [0, 1]],
+        normals: [[0, 2], [0, 0]],
+        closed: true
+      }]
+    }, createLinearSweepSections(2), {
+      sideLayout: 'shared',
+      normalMode: 'profile',
+      startCap: false,
+      endCap: false,
+      attributeSink: geometry => {
+        geometry.uvs.push(0, 0);
+        geometry.uvs2.push(0, 0);
+      }
+    });
+    const diagonal = 1 / Math.sqrt(2);
+    const expectedRing = [
+      0, 1, 0,
+      -diagonal, diagonal, 0,
+      -diagonal, -diagonal, 0,
+      diagonal, -diagonal, 0,
+      0, 1, 0
+    ];
+
+    expectNumberArrayClose(result.normals, [...expectedRing, ...expectedRing]);
+  });
+
+  it('preserves precomputed cap triangle mapping on both ends', () => {
+    const capCalls: string[] = [];
+    const result = createSweep({
+      loops: [{
+        points: [[0, 0], [1, 0], [1, 1], [0, 1]],
+        normals: [[0, 1], [1, 0], [0, -1], [-1, 0]],
+        closed: true
+      }],
+      capTriangles: [0, 2, 1, 0, 3, 2]
+    }, [createLinearSweepSections(1)[0]!], {
+      sideLayout: 'shared',
+      normalMode: 'profile',
+      startCap: true,
+      endCap: true,
+      attributeSink: (geometry, surface, _sectionIndex, loopIndex, pointIndex) => {
+        if (surface !== 'side') capCalls.push(`${surface}:${loopIndex}:${pointIndex}`);
+        geometry.uvs.push(0, 0);
+        geometry.uvs2.push(0, 0);
+      }
+    });
+
+    expect(capCalls).toEqual([
+      'start-cap:0:0', 'start-cap:0:1', 'start-cap:0:2', 'start-cap:0:3',
+      'end-cap:0:0', 'end-cap:0:1', 'end-cap:0:2', 'end-cap:0:3'
+    ]);
+    expect(result.indices).toEqual([
+      5, 7, 6, 5, 8, 7,
+      9, 10, 11, 9, 11, 12
+    ]);
+  });
+
+  it('maps Earcut caps with holes to both cap vertex ranges', () => {
+    const capCalls: string[] = [];
+    const result = createSweep({
+      loops: [
+        { points: [[-2, -2], [-2, 2], [2, 2], [2, -2]], closed: true },
+        { points: [[-1, -1], [1, -1], [1, 1], [-1, 1]], closed: true }
+      ]
+    }, [createLinearSweepSections(1)[0]!], {
+      sideLayout: 'shared',
+      normalMode: 'mesh',
+      startCap: true,
+      endCap: true,
+      attributeSink: (geometry, surface, _sectionIndex, loopIndex, pointIndex) => {
+        if (surface !== 'side') capCalls.push(`${surface}:${loopIndex}:${pointIndex}`);
+        geometry.uvs.push(0, 0);
+        geometry.uvs2.push(0, 0);
+      }
+    });
+
+    expect(capCalls).toEqual([
+      'start-cap:0:0', 'start-cap:0:1', 'start-cap:0:2', 'start-cap:0:3',
+      'start-cap:1:0', 'start-cap:1:1', 'start-cap:1:2', 'start-cap:1:3',
+      'end-cap:0:0', 'end-cap:0:1', 'end-cap:0:2', 'end-cap:0:3',
+      'end-cap:1:0', 'end-cap:1:1', 'end-cap:1:2', 'end-cap:1:3'
+    ]);
+    expect(result.positions).toHaveLength(26 * 3);
+    expect(result.indices.length).toBeGreaterThan(0);
+    expect(Math.max(...result.indices)).toBeLessThan(26);
+  });
 });
