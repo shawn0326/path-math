@@ -34,11 +34,12 @@
     "typescript"
   ],
   "sideEffects": false,
+  "packageManager": "npm@11.6.2",
   "workspaces": [
     "site"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts",
@@ -46,6 +47,7 @@
     "site:dev": "npm run docs && npm run dev --workspace=@path-geometry/site",
     "site:build": "npm run build && npm run build --workspace=@path-geometry/site",
     "pages:build": "npm run site:build && npm run docs",
+    "check": "npm run typecheck && npm run test && npm run typecheck --workspace=@path-geometry/site",
     "prepack": "npm run build",
     "prepublishOnly": "npm run typecheck && npm run test",
     "typecheck": "tsc --noEmit",
