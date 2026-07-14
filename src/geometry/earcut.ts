@@ -3,24 +3,25 @@
  * Used internally for triangulating extruded 2D shape caps.
  */
 
-class EarcutNode {
+interface EarcutNode {
   i: number;
   x: number;
   y: number;
   prev: EarcutNode;
   next: EarcutNode;
-  z: number | null = null;
-  prevZ: EarcutNode | null = null;
-  nextZ: EarcutNode | null = null;
-  steiner = false;
+  z: number | null;
+  prevZ: EarcutNode | null;
+  nextZ: EarcutNode | null;
+  steiner: boolean;
+}
 
-  constructor(i: number, x: number, y: number) {
-    this.i = i;
-    this.x = x;
-    this.y = y;
-    this.prev = this;
-    this.next = this;
-  }
+function createNode(i: number, x: number, y: number): EarcutNode {
+  return {
+    i, x, y,
+    prev: null!, next: null!,
+    z: null, prevZ: null, nextZ: null,
+    steiner: false
+  };
 }
 
 export function triangulate(data: number[], holeIndices: number[] = [], dim = 2): number[] {
@@ -188,7 +189,7 @@ function isEarHashed(ear: EarcutNode, minX: number, minY: number, invSize: numbe
   let p = ear.prevZ;
   let n = ear.nextZ;
 
-  while (p && p.z !== null && p.z >= minZ && n && n.z !== null && n.z <= maxZ) {
+  while (p && p.z! >= minZ && n && n.z! <= maxZ) {
     if (p !== ear.prev && p !== ear.next && pointInTriangle(a.x, a.y, b.x, b.y, c.x, c.y, p.x, p.y) && area(p.prev, p, p.next) >= 0) {
       return false;
     }
@@ -200,14 +201,14 @@ function isEarHashed(ear: EarcutNode, minX: number, minY: number, invSize: numbe
     n = n.nextZ;
   }
 
-  while (p && p.z !== null && p.z >= minZ) {
+  while (p && p.z! >= minZ) {
     if (p !== ear.prev && p !== ear.next && pointInTriangle(a.x, a.y, b.x, b.y, c.x, c.y, p.x, p.y) && area(p.prev, p, p.next) >= 0) {
       return false;
     }
     p = p.prevZ;
   }
 
-  while (n && n.z !== null && n.z <= maxZ) {
+  while (n && n.z! <= maxZ) {
     if (n !== ear.prev && n !== ear.next && pointInTriangle(a.x, a.y, b.x, b.y, c.x, c.y, n.x, n.y) && area(n.prev, n, n.next) >= 0) {
       return false;
     }
@@ -356,7 +357,7 @@ function indexCurve(start: EarcutNode, minX: number, minY: number, invSize: numb
     p = p.next;
   } while (p !== start);
 
-  if (p.prevZ) p.prevZ.nextZ = null;
+  p.prevZ!.nextZ = null;
   p.prevZ = null;
 
   sortLinked(p);
@@ -385,7 +386,7 @@ function sortLinked(list: EarcutNode): EarcutNode {
 
       while (pSize > 0 || (qSize > 0 && q)) {
         let e: EarcutNode;
-        if (pSize !== 0 && p && (qSize === 0 || !q || (p.z ?? 0) <= (q.z ?? 0))) {
+        if (pSize !== 0 && p && (qSize === 0 || !q || p.z! <= q.z!)) {
           e = p;
           p = p.nextZ;
           pSize--;
@@ -521,8 +522,8 @@ function middleInside(a: EarcutNode, b: EarcutNode): boolean {
 }
 
 function splitPolygon(a: EarcutNode, b: EarcutNode): EarcutNode {
-  const a2 = new EarcutNode(a.i, a.x, a.y);
-  const b2 = new EarcutNode(b.i, b.x, b.y);
+  const a2 = createNode(a.i, a.x, a.y);
+  const b2 = createNode(b.i, b.x, b.y);
   const an = a.next;
   const bp = b.prev;
 
@@ -542,7 +543,7 @@ function splitPolygon(a: EarcutNode, b: EarcutNode): EarcutNode {
 }
 
 function insertNode(i: number, x: number, y: number, last: EarcutNode | null): EarcutNode {
-  const p = new EarcutNode(i, x, y);
+  const p = createNode(i, x, y);
 
   if (!last) {
     p.prev = p;

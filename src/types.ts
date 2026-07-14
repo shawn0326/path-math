@@ -299,6 +299,10 @@ export interface BuildExtrudeShapeOptions {
   pathFrames?: PathFrames;
   /** Expand sharp path corners into transition sections. Defaults to false. */
   cornerTransition?: boolean;
+  /** Generate vertex normals. Defaults to true. */
+  generateNormals?: boolean;
+  /** Generate the secondary UV set. Defaults to true. */
+  generateUvs2?: boolean;
 }
 
 /**

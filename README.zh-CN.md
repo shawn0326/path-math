@@ -182,6 +182,8 @@ for (let i = 0; i < frames.points.length; i++) {
 
 所有 geometry builder 都返回普通数组：`positions`、`normals`、`uvs`、`uvs2` 和 `indices`。你可以按需要把它们转换成 WebGL、WebGPU 或自定义 renderer 所需的 buffer/attribute 格式。
 
+Extrude 默认生成法线和第二套 UV。可以用 `generateNormals: false` 或 `generateUvs2: false` 跳过对应计算；返回对象仍会保留相应字段，其值为空数组。
+
 基于路径的 geometry builder 只沿 frame 的拐角二等分方向进行 miter 修正。设置 `cornerTransition: true` 可以为明显拐角展开 corner transition；默认情况下每个 frame 只生成一个截面。Ribbon 原有的 `sharp` 选项作为 `cornerTransition` 的废弃兼容别名继续保留。
 
 ```ts
@@ -230,7 +232,9 @@ const extrudeGeometry = geometry.createExtrudeShape({
     ]
   ],
   pathFrames: frames,
-  cornerTransition: true
+  cornerTransition: true,
+  generateNormals: true,
+  generateUvs2: true
 });
 ```
 

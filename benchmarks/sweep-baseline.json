@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "description": "Pre-optimization self baselines measured with the isolated sweep benchmark on the acceptance environment.",
+  "environment": {
+    "node": "24.x",
+    "platform": "win32",
+    "arch": "x64",
+    "t3dVersion": "0.5.4"
+  },
+  "threshold": 1.05,
+  "scenarios": {
+    "tube-corner-transition-1k": {
+      "medianMs": 9.00581,
+      "atReturn": {
+        "heapUsed": 17128064,
+        "arrayBuffers": 0
+      },
+      "retained": {
+        "heapUsed": 3658976,
+        "arrayBuffers": 0
+      }
+    },
+    "ribbon-10k": {
+      "medianMs": 5.446566666666665,
+      "atReturn": {
+        "heapUsed": 13957976,
+        "arrayBuffers": 0
+      },
+      "retained": {
+        "heapUsed": 2630632,
+        "arrayBuffers": 0
+      }
+    }
+  }
+}

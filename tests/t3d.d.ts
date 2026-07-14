@@ -98,3 +98,38 @@ declare module 't3d/examples/jsm/math/curves/CurvePath3.js' {
     };
   }
 }
+
+declare module 't3d/examples/jsm/geometries/builders/TubeBuilder.js' {
+  export const TubeBuilder: {
+    getGeometryData(frames: unknown, options?: {
+      radius?: number;
+      radialSegments?: number;
+      startRad?: number;
+      generateStartCap?: boolean;
+      generateEndCap?: boolean;
+    }): {
+      positions: number[];
+      normals: number[];
+      uvs: number[];
+      uvs2: number[];
+      indices: number[];
+    };
+  };
+}
+
+declare module 't3d/examples/jsm/geometries/builders/ExtrudeShapeBuilder.js' {
+  export const ExtrudeShapeBuilder: {
+    getGeometryData(shape: {
+      contour: number[][];
+      holes?: number[][][];
+      depth?: number;
+      generateTop?: boolean;
+      generateBottom?: boolean;
+      pathFrames?: unknown;
+    }): {
+      positions: number[];
+      uvs: number[];
+      indices: number[];
+    };
+  };
+}

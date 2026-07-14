@@ -1,10 +1,11 @@
 import type { BuildExtrudeShapeOptions, ExtrudeShapePoint, GeometryData } from '../types';
 import {
-  createLinearSweepSections,
+  createExtrudeSweepAttributes,
+  createLinearSweepSource,
   createSweep,
-  createSweepSections
+  createSweepSectionSource
 } from './sweep';
-import type { SweepAttributeSink, SweepProfile } from './sweep';
+import type { SweepProfile } from './sweep';
 
 function createGeometry(): GeometryData {
   return {
@@ -95,46 +96,25 @@ export function createExtrudeShape(shape: BuildExtrudeShapeOptions): GeometryDat
   const profile = createProfile(shape);
   if (profile.loops[0]!.points.length < 3) return createGeometry();
 
-  const sections = pathFrames
-    ? createSweepSections(profile, pathFrames, {
+  const sectionSource = pathFrames
+    ? createSweepSectionSource(profile, pathFrames, {
       cornerTransition: shape.cornerTransition ?? false,
-      sanitizeWidthScale: false
+      sanitizeWidthScale: false,
+      regularScaleMode: 'none'
     })
-    : createLinearSweepSections(depth);
-  const attributeSink: SweepAttributeSink = (
-    geometry,
-    surface,
-    sectionIndex,
-    loopIndex,
-    pointIndex,
-    _profileStep,
-    profileDistance
-  ) => {
-    const point = profile.loops[loopIndex]!.points[pointIndex]!;
-    let u: number;
-    let v: number;
+    : createLinearSweepSource(depth);
 
-    if (surface === 'side') {
-      u = -profileDistance;
-      v = pathFrames ? -sections[sectionIndex]!.length : sections[sectionIndex]!.origin[2]!;
-    } else if (surface === 'start-cap') {
-      u = negativeDepth ? -point[0]! : point[0]!;
-      v = point[1]!;
-    } else {
-      u = negativeDepth ? point[0]! : -point[0]!;
-      v = point[1]!;
-    }
-
-    geometry.uvs.push(u, v);
-    geometry.uvs2.push(u, v);
-  };
-
-  return createSweep(profile, sections, {
+  return createSweep(profile, sectionSource, {
     sideLayout: 'edge-isolated',
     normalMode: 'mesh',
     startCap: shape.generateTop ?? true,
     endCap: shape.generateBottom ?? true,
     flipWinding: negativeDepth,
-    attributeSink
+    generateNormals: shape.generateNormals ?? true,
+    attributes: createExtrudeSweepAttributes(
+      pathFrames !== undefined,
+      negativeDepth,
+      shape.generateUvs2 ?? true
+    )
   });
 }

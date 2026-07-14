@@ -6,6 +6,8 @@ import { LineCurve3 as T3DLineCurve3 } from 't3d/examples/jsm/math/curves/LineCu
 import { QuadraticBezierCurve3 as T3DQuadraticBezierCurve3 } from 't3d/examples/jsm/math/curves/QuadraticBezierCurve3.js';
 import { CubicBezierCurve3 as T3DCubicBezierCurve3 } from 't3d/examples/jsm/math/curves/CubicBezierCurve3.js';
 import { CurvePath3 as T3DCurvePath3 } from 't3d/examples/jsm/math/curves/CurvePath3.js';
+import { TubeBuilder as T3DTubeBuilder } from 't3d/examples/jsm/geometries/builders/TubeBuilder.js';
+import { ExtrudeShapeBuilder as T3DExtrudeShapeBuilder } from 't3d/examples/jsm/geometries/builders/ExtrudeShapeBuilder.js';
 import { segment, path, geometry } from '../src/index';
 import type { Path, PathFrames, PolylineOptions, ReadonlyVector } from '../src/index';
 import { createLinearSweepSections, createSweep } from '../src/geometry/sweep';
@@ -28,6 +30,30 @@ function vec3FromT3D(v: T3DVector3): Vector3 {
 
 function toT3DVector3(v: ReadonlyVector): T3DVector3 {
   return new T3DVector3(v[0]!, v[1]!, v[2]!);
+}
+
+function framesToT3D(frames: PathFrames) {
+  return {
+    ...frames,
+    points: frames.points.map(toT3DVector3),
+    tangents: frames.tangents.map(toT3DVector3),
+    normals: frames.normals.map(toT3DVector3),
+    binormals: frames.binormals.map(toT3DVector3),
+    bisectors: frames.bisectors.map(toT3DVector3)
+  };
+}
+
+function canonicalTriangleIndices(indices: number[]): string[] {
+  const triangles: string[] = [];
+  for (let i = 0; i < indices.length; i += 3) {
+    const a = indices[i]!;
+    const b = indices[i + 1]!;
+    const c = indices[i + 2]!;
+    const rotations = [`${a},${b},${c}`, `${b},${c},${a}`, `${c},${a},${b}`];
+    rotations.sort();
+    triangles.push(rotations[0]!);
+  }
+  return triangles.sort();
 }
 
 function expectT3DPointsClose(actual: Vector3[], expected: T3DVector3[], epsilon = EPS): void {
@@ -811,6 +837,76 @@ describe('geometry builders', () => {
     expectVec3Close(vec3.fromValues(extrudeGeom.positions[0]!, extrudeGeom.positions[1]!, extrudeGeom.positions[2]!), vec3.fromValues(0, 1, 0));
   });
 
+  it('can omit extrude normals and secondary UVs without changing the remaining geometry', () => {
+    const contour = () => [[0, 0], [0, 1], [1, 1], [1, 0]];
+    const full = geometry.createExtrudeShape({ contour: contour(), depth: 2 });
+    const withoutNormals = geometry.createExtrudeShape({
+      contour: contour(),
+      depth: 2,
+      generateNormals: false
+    });
+    const withoutUvs2 = geometry.createExtrudeShape({
+      contour: contour(),
+      depth: 2,
+      generateUvs2: false
+    });
+    const minimal = geometry.createExtrudeShape({
+      contour: contour(),
+      depth: 2,
+      generateNormals: false,
+      generateUvs2: false
+    });
+
+    expect(withoutNormals.normals).toEqual([]);
+    expect(withoutUvs2.uvs2).toEqual([]);
+    expect(minimal.normals).toEqual([]);
+    expect(minimal.uvs2).toEqual([]);
+    for (const result of [withoutNormals, withoutUvs2, minimal]) {
+      expect(result.positions).toEqual(full.positions);
+      expect(result.uvs).toEqual(full.uvs);
+      expect(result.indices).toEqual(full.indices);
+    }
+  });
+
+  it('matches t3d non-sharp width-scale semantics for tube and path extrusion', () => {
+    const frames: PathFrames = {
+      points: [[0, 0, 0], [1, 0, 0]],
+      tangents: [[1, 0, 0], [1, 0, 0]],
+      normals: [[0, 1, 0], [0, 1, 0]],
+      binormals: [[0, 0, 1], [0, 0, 1]],
+      bisectors: [[0, 0, 1], [0, 0, 1]],
+      lengths: [0, 1],
+      widthScales: [2, 2],
+      sharps: [false, false],
+      tangentTypes: [0, 0]
+    };
+    const t3dFrames = framesToT3D(frames);
+    const tube = geometry.createTube(frames, { radius: 1, radialSegments: 4 });
+    const t3dTube = T3DTubeBuilder.getGeometryData(t3dFrames, { radius: 1, radialSegments: 4 });
+    expectNumberArrayClose(tube.positions, t3dTube.positions, 1e-6);
+    expectNumberArrayClose(tube.normals, t3dTube.normals, 1e-6);
+    expectNumberArrayClose(tube.uvs, t3dTube.uvs, 1e-6);
+    expectNumberArrayClose(tube.uvs2, t3dTube.uvs2, 1e-6);
+    expect(tube.indices).toEqual(t3dTube.indices);
+
+    const contour = () => [[0, 0], [0, 1], [1, 0]];
+    const extrude = geometry.createExtrudeShape({
+      contour: contour(),
+      pathFrames: frames,
+      generateTop: false,
+      generateBottom: false
+    });
+    const t3dExtrude = T3DExtrudeShapeBuilder.getGeometryData({
+      contour: contour(),
+      pathFrames: t3dFrames,
+      generateTop: false,
+      generateBottom: false
+    });
+    expectNumberArrayClose(extrude.positions, t3dExtrude.positions, 1e-6);
+    expectNumberArrayClose(extrude.uvs, t3dExtrude.uvs, 1e-6);
+    expect(canonicalTriangleIndices(extrude.indices)).toEqual(canonicalTriangleIndices(t3dExtrude.indices));
+  });
+
   it('supports extruded shape cap options and holes', () => {
     const withoutTop = geometry.createExtrudeShape({
       contour: [[0, 0], [2, 0], [2, 2], [0, 2]],
@@ -849,6 +945,28 @@ describe('geometry builders', () => {
       contour: [[0, 0], [1, 0], [1, 1]],
       pathFrames: frames
     })).toEqual({ positions: [], normals: [], uvs: [], uvs2: [], indices: [] });
+  });
+
+  it('keeps degenerate extrude contours finite and honors minimal output switches', () => {
+    const createContour = () => [[0, 0], [1, 0], [2, 0]];
+    const full = geometry.createExtrudeShape({ contour: createContour(), depth: 2 });
+    const minimal = geometry.createExtrudeShape({
+      contour: createContour(),
+      depth: 2,
+      generateNormals: false,
+      generateUvs2: false
+    });
+
+    expect(full.positions.every(Number.isFinite)).toBe(true);
+    expect(full.normals.every(Number.isFinite)).toBe(true);
+    expect(full.uvs.every(Number.isFinite)).toBe(true);
+    expect(full.uvs2.every(Number.isFinite)).toBe(true);
+    expect(full.indices.every(index => index >= 0 && index < full.positions.length / 3)).toBe(true);
+    expect(minimal.normals).toEqual([]);
+    expect(minimal.uvs2).toEqual([]);
+    expect(minimal.positions).toEqual(full.positions);
+    expect(minimal.uvs).toEqual(full.uvs);
+    expect(minimal.indices).toEqual(full.indices);
   });
 
   it('builds indexed tube side geometry from straight frames', () => {

@@ -50,7 +50,7 @@ export function scaleAlong(
   return out;
 }
 
-function setNormalAxes(
+export function setCornerNormalAxes(
   normalX: Vector3,
   normalY: Vector3,
   xAxis: ReadonlyVector,
@@ -105,7 +105,7 @@ function createSection(
   const resolvedYAxis = vec3.clone(yAxis);
   const normalX = vec3.create();
   const normalY = vec3.create();
-  setNormalAxes(
+  setCornerNormalAxes(
     normalX,
     normalY,
     resolvedXAxis,

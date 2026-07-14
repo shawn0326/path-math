@@ -182,6 +182,8 @@ Use `geometry.createTube(frames, options?)`, `geometry.createRibbon(frames, opti
 
 All geometry builders return plain arrays: `positions`, `normals`, `uvs`, `uvs2`, and `indices`. You can convert them to the buffer/attribute format required by WebGL, WebGPU, or your renderer.
 
+Extruded shapes generate normals and secondary UVs by default. Set `generateNormals: false` or `generateUvs2: false` to skip either pass; the corresponding field remains present as an empty array.
+
 Path-based builders apply miter correction only along each frame's corner bisector. Set `cornerTransition: true` to expand sharp frames into corner-transition sections; by default, each frame produces one section. Ribbon's previous `sharp` option remains as a deprecated compatibility alias for `cornerTransition`.
 
 ```ts
@@ -230,7 +232,9 @@ const extrudeGeometry = geometry.createExtrudeShape({
     ]
   ],
   pathFrames: frames,
-  cornerTransition: true
+  cornerTransition: true,
+  generateNormals: true,
+  generateUvs2: true
 });
 ```
 
